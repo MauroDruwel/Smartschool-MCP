@@ -225,7 +225,133 @@ def get_future_tasks() -> Dict[str, Any]:
         return {"error": f"Failed to retrieve future tasks: {str(e)}"}
 
 
-
+@mcp.tool()
+def get_messages(
+    limit: int = 15, 
+    offset: int = 0, 
+    box_type: str = "INBOX",
+    search_query: Optional[str] = None,
+    sender_filter: Optional[str] = None,
+    include_body: bool = False
+) -> Dict[str, Any]:
+    """
+    Retrieve messages from the specified mailbox with filtering options.
+    
+    Args:
+        limit: Maximum number of messages to return (default: 15)
+        offset: Number of messages to skip from the beginning (default: 0)
+        box_type: Type of mailbox - "INBOX", "SENT", "DRAFT", etc. (default: "INBOX")
+        search_query: Search in subject and body content (case-insensitive)
+        sender_filter: Filter messages by sender name (partial match, case-insensitive)
+        include_body: Whether to include full message body (default: False for performance)
+    
+    Returns:
+        Dictionary with messages list and pagination info.
+        
+    Examples:
+        - get_messages() -> First 15 inbox messages (headers only)
+        - get_messages(search_query="homework") -> Messages containing "homework"
+        - get_messages(sender_filter="teacher") -> Messages from senders containing "teacher"
+        - get_messages(include_body=True) -> Full messages with body content
+    """
+    try:
+        # Convert string box_type to BoxType enum
+        try:
+            box_type_enum = getattr(BoxType, box_type.upper())
+        except AttributeError:
+            box_type_enum = BoxType.INBOX  # Default fallback
+        
+        # Get message headers
+        message_headers = MessageHeaders(session, box_type=box_type_enum)
+        all_headers = list(message_headers)
+        
+        # Apply filtering
+        filtered_headers = []
+        
+        for header in all_headers:
+            # Get full message for filtering (we need it for search anyway)
+            try:
+                full_message = Message(session, header.id).get()
+                
+                # Apply sender filter
+                if sender_filter:
+                    sender_name = getattr(full_message, 'from_', '') or ''
+                    if sender_filter.lower() not in sender_name.lower():
+                        continue
+                
+                # Apply search query filter
+                if search_query:
+                    subject = getattr(full_message, 'subject', '') or ''
+                    body = getattr(full_message, 'body', '') or ''
+                    search_text = f"{subject} {body}".lower()
+                    
+                    if search_query.lower() not in search_text:
+                        continue
+                
+                # Store the full message with the header for later use
+                header._full_message = full_message
+                filtered_headers.append(header)
+                
+            except Exception:
+                # If we can't get the full message, skip this header
+                continue
+        
+        # Apply pagination
+        end_index = offset + limit
+        paginated_headers = filtered_headers[offset:end_index]
+        
+        messages_list = []
+        
+        for header in paginated_headers:
+            # Use cached full message if available, otherwise fetch it
+            if hasattr(header, '_full_message'):
+                full_message = header._full_message
+            else:
+                try:
+                    full_message = Message(session, header.id).get()
+                except Exception:
+                    continue
+            
+            message_data = {
+                "id": getattr(header, 'id', None),
+                "from": getattr(full_message, 'from_', 'Unknown Sender'),
+                "subject": getattr(full_message, 'subject', 'No Subject'),
+                "date": _safe_format_date(getattr(header, 'date', None)),
+                "read": getattr(header, 'read', None),
+                "priority": getattr(header, 'priority', None),
+            }
+            
+            # Include body only if requested
+            if include_body:
+                message_data["body"] = getattr(full_message, 'body', '')
+            else:
+                # Provide a preview of the body (first 100 characters)
+                body = getattr(full_message, 'body', '') or ''
+                message_data["body_preview"] = body[:100] + "..." if len(body) > 100 else body
+            
+            messages_list.append(message_data)
+        
+        # Add metadata about pagination and filtering
+        total_messages = len(filtered_headers)
+        return {
+            "messages": messages_list,
+            "pagination": {
+                "limit": limit,
+                "offset": offset,
+                "total": total_messages,
+                "returned": len(messages_list),
+                "has_more": end_index < total_messages
+            },
+            "filters": {
+                "box_type": box_type,
+                "search_query": search_query,
+                "sender_filter": sender_filter,
+                "include_body": include_body
+            }
+        }
+    
+    except Exception as e:
+        return {"error": f"Failed to retrieve messages: {str(e)}"}
 
 
 if __name__ == "__main__":
