@@ -1,11 +1,11 @@
 """
 Smartschool MCP Server
-Provides tools to interact with Smartschool API for courses and results.
+Provides tools to interact with Smartschool API for courses, results and tasks.
 """
 
 from typing import List, Dict, Any, Optional
 from mcp.server.fastmcp import FastMCP
-from smartschool import Courses, EnvCredentials, Smartschool, Results, ResultDetail
+from smartschool import Courses, EnvCredentials, Smartschool, Results, ResultDetail, FutureTasks, MessageHeaders, Message, BoxType
 
 # Initialize MCP server and Smartschool session
 mcp = FastMCP("Smartschool MCP")
@@ -172,6 +172,60 @@ def get_results(limit: int = 15, offset: int = 0, course_filter: Optional[str] =
     
     except Exception as e:
         return {"error": f"Failed to retrieve results: {str(e)}"}
+
+
+@mcp.tool()
+def get_future_tasks() -> Dict[str, Any]:
+    """
+    Retrieve upcoming assignments and tasks.
+    
+    Returns:
+        Dictionary with future tasks organized by date and course.
+    """
+    try:
+        future_tasks = FutureTasks(session)
+        tasks_data = []
+        
+        for day in future_tasks:
+            day_data = {
+                "date": _safe_format_date(day.date),
+                "courses": []
+            }
+            
+            for course in day.courses:
+                course_data = {
+                    "name": course.name if hasattr(course, 'name') else "Unknown Course",
+                    "tasks": []
+                }
+                
+                # Extract tasks from the course
+                if hasattr(course, 'items') and hasattr(course.items, 'tasks'):
+                    for task in course.items.tasks:
+                        task_data = {
+                            "label": getattr(task, 'label', 'N/A'),
+                            "description": getattr(task, 'description', 'N/A')
+                        }
+                        course_data["tasks"].append(task_data)
+                
+                # Only add course if it has tasks
+                if course_data["tasks"]:
+                    day_data["courses"].append(course_data)
+            
+            # Only add day if it has courses with tasks
+            if day_data["courses"]:
+                tasks_data.append(day_data)
+        
+        return {
+            "future_tasks": tasks_data,
+            "total_days": len(tasks_data),
+            "total_tasks": sum(len(task) for day in tasks_data for course in day["courses"] for task in course["tasks"])
+        }
+    
+    except Exception as e:
+        return {"error": f"Failed to retrieve future tasks: {str(e)}"}
+
+
+
 
 
 if __name__ == "__main__":
