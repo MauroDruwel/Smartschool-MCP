@@ -4,7 +4,7 @@ A Model Context Protocol (MCP) server that enables AI assistants to interact wit
 
 ## Overview
 
-This MCP server allows AI assistants like Claude to seamlessly access and retrieve information from Smartschool, a widely-used educational management platform in Belgium and the Netherlands. With this server, students can ask their AI assistant about their grades, upcoming assignments, course information, and messages without leaving their conversation.
+This MCP server allows AI assistants like Claude to seamlessly access and retrieve information from Smartschool, a widely-used educational management platform in Belgium and the Netherlands. With this MCP server, students can ask their AI assistant about their grades, upcoming assignments, course information, and messages without leaving their conversation.
 
 ## Features
 
@@ -38,16 +38,26 @@ Access mailbox messages with powerful filtering options.
 
 ## Installation
 
+> **⚠️ Note:** This package is not available on PyPI. You must clone the repository to use it.
+
 ### Prerequisites
 
 - Python 3.13 or higher
 - [uv](https://docs.astral.sh/uv/) package manager
+- Git
 - A Smartschool account with valid credentials
 
-### Quick Install
+### Installation Steps
 
-Use the MCP CLI to install the server:
+**This repository must be cloned from GitHub before installation:**
 
+1. **Clone the repository:**
+```bash
+git clone https://github.com/MauroDruwel/Smartschool-MCP.git
+cd Smartschool-MCP
+```
+
+2. **Install using MCP CLI:**
 ```bash
 uv run mcp install main.py \
   --name "Smartschool MCP" \
@@ -57,6 +67,21 @@ uv run mcp install main.py \
   -v SMARTSCHOOL_MFA="YYYY-MM-DD"
 ```
 
+This will install the server and configure it for use with Claude Desktop or other MCP clients.
+
+### Alternative: Manual Setup
+
+If you prefer not to use the MCP CLI, you can set up the server manually:
+
+1. After cloning, install dependencies:
+```bash
+uv sync
+```
+
+2. Configure environment variables (see below)
+
+3. Add the server to your MCP client configuration manually (see Claude Desktop Configuration section)
+
 ### Configuration Parameters
 
 | Parameter | Description | Example |
@@ -65,39 +90,6 @@ uv run mcp install main.py \
 | `SMARTSCHOOL_PASSWORD` | Your Smartschool password | `yourpassword123` |
 | `SMARTSCHOOL_MAIN_URL` | Your school's Smartschool URL (without https://) | `school.smartschool.be` |
 | `SMARTSCHOOL_MFA` | Your date of birth (YYYY-MM-DD format) | `2008-01-15` |
-
-### Manual Installation
-
-1. Clone this repository:
-```bash
-git clone https://github.com/MauroDruwel/Smartschool-MCP.git
-cd Smartschool-MCP
-```
-
-2. Install dependencies:
-```bash
-uv sync
-```
-
-3. Set up environment variables:
-```bash
-# Windows PowerShell
-$env:SMARTSCHOOL_USERNAME="your_username"
-$env:SMARTSCHOOL_PASSWORD="your_password"
-$env:SMARTSCHOOL_MAIN_URL="your-school.smartschool.be"
-$env:SMARTSCHOOL_MFA="YYYY-MM-DD"
-
-# Linux/macOS
-export SMARTSCHOOL_USERNAME="your_username"
-export SMARTSCHOOL_PASSWORD="your_password"
-export SMARTSCHOOL_MAIN_URL="your-school.smartschool.be"
-export SMARTSCHOOL_MFA="YYYY-MM-DD"
-```
-
-4. Run the server:
-```bash
-uv run main.py
-```
 
 ## Usage Examples
 
@@ -139,7 +131,7 @@ get_messages(
 
 ## Claude Desktop Configuration
 
-Add this to your `claude_desktop_config.json`:
+If you installed using the MCP CLI, the configuration is already set up automatically. If you're setting up manually, add this to your `claude_desktop_config.json`:
 
 ```json
 {
@@ -149,7 +141,7 @@ Add this to your `claude_desktop_config.json`:
       "args": [
         "run",
         "--directory",
-        "C:\\path\\to\\Smartschool-MCP",
+        "C:\\Users\\YourUsername\\path\\to\\Smartschool-MCP",
         "main.py"
       ],
       "env": {
@@ -162,6 +154,8 @@ Add this to your `claude_desktop_config.json`:
   }
 }
 ```
+
+> **Important:** Replace `C:\Users\YourUsername\path\to\Smartschool-MCP` with the actual absolute path where you cloned the repository.
 
 **Config file locations:**
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
@@ -228,7 +222,7 @@ This project is open source and available under the MIT License.
 ## Credits
 
 - Built using the [Model Context Protocol](https://modelcontextprotocol.io/)
-- Uses a custom fork of the Smartschool API wrapper
+- Uses the Smartschool Python Library (https://github.com/svaningelgem/smartschool)
 - Created by [Mauro Druwel](https://github.com/MauroDruwel)
 
 ## Disclaimer
