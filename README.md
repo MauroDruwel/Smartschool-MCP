@@ -40,49 +40,56 @@ Access mailbox messages with powerful filtering options.
 
 ## Installation
 
-> **⚠️ Note:** This package is not available on PyPI. You must clone the repository to use it.
+[![PyPI version](https://badge.fury.io/py/smartschool-mcp.svg)](https://pypi.org/project/smartschool-mcp/)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 
 ### Prerequisites
 
 - Python 3.13 or higher
-- [uv](https://docs.astral.sh/uv/) package manager
-- Git
+- [uv](https://docs.astral.sh/uv/) package manager (recommended) or pip
 - A Smartschool account with valid credentials
 
-### Installation Steps
+### Quick Install with MCP CLI (Recommended)
 
-**This repository must be cloned from GitHub before installation:**
+The easiest way to install and configure the server is using the MCP CLI:
 
-1. **Clone the repository:**
+```bash
+# Install from PyPI and configure automatically
+uvx mcp install smartschool-mcp \
+  -e SMARTSCHOOL_USERNAME="your_username" \
+  -e SMARTSCHOOL_PASSWORD="your_password" \
+  -e SMARTSCHOOL_MAIN_URL="your-school.smartschool.be" \
+  -e SMARTSCHOOL_MFA="YYYY-MM-DD"
+```
+
+This command will:
+- Install the package from PyPI
+- Add it to your Claude Desktop configuration
+- Set up the environment variables automatically
+
+### Manual Installation from PyPI
+
+If you prefer to install manually and configure later:
+
+```bash
+# Using pip
+pip install smartschool-mcp
+
+# Using uv (recommended)
+uv pip install smartschool-mcp
+```
+
+After manual installation, you'll need to configure Claude Desktop manually (see configuration section below).
+
+### Installation from Source
+
+If you want to contribute or use the latest development version:
+
 ```bash
 git clone https://github.com/MauroDruwel/Smartschool-MCP.git
 cd Smartschool-MCP
-```
-
-2. **Install using MCP CLI:**
-```bash
-uv run mcp install main.py \
-  --name "Smartschool MCP" \
-  -v SMARTSCHOOL_USERNAME="your_username" \
-  -v SMARTSCHOOL_PASSWORD="your_password" \
-  -v SMARTSCHOOL_MAIN_URL="your-school.smartschool.be" \
-  -v SMARTSCHOOL_MFA="YYYY-MM-DD"
-```
-
-This will install the server and configure it for use with Claude Desktop or other MCP clients.
-
-### Alternative: Manual Setup
-
-If you prefer not to use the MCP CLI, you can set up the server manually:
-
-1. After cloning, install dependencies:
-```bash
 uv sync
 ```
-
-2. Configure environment variables (see below)
-
-3. Add the server to your MCP client configuration manually (see Claude Desktop Configuration section)
 
 ### Configuration Parameters
 
@@ -133,7 +140,52 @@ get_messages(
 
 ## Claude Desktop Configuration
 
-If you installed using the MCP CLI, the configuration is already set up automatically. If you're setting up manually, add this to your `claude_desktop_config.json`:
+Add this configuration to your `claude_desktop_config.json`:
+
+### Option 1: Using uvx (Recommended)
+
+```json
+{
+  "mcpServers": {
+    "smartschool": {
+      "command": "uvx",
+      "args": [
+        "smartschool-mcp"
+      ],
+      "env": {
+        "SMARTSCHOOL_USERNAME": "your_username",
+        "SMARTSCHOOL_PASSWORD": "your_password",
+        "SMARTSCHOOL_MAIN_URL": "your-school.smartschool.be",
+        "SMARTSCHOOL_MFA": "YYYY-MM-DD"
+      }
+    }
+  }
+}
+```
+
+### Option 2: Using Python module
+
+```json
+{
+  "mcpServers": {
+    "smartschool": {
+      "command": "python",
+      "args": [
+        "-m",
+        "smartschool_mcp"
+      ],
+      "env": {
+        "SMARTSCHOOL_USERNAME": "your_username",
+        "SMARTSCHOOL_PASSWORD": "your_password",
+        "SMARTSCHOOL_MAIN_URL": "your-school.smartschool.be",
+        "SMARTSCHOOL_MFA": "YYYY-MM-DD"
+      }
+    }
+  }
+}
+```
+
+### Option 3: From source (for development)
 
 ```json
 {
@@ -157,7 +209,7 @@ If you installed using the MCP CLI, the configuration is already set up automati
 }
 ```
 
-> **Important:** Replace `C:\Users\YourUsername\path\to\Smartschool-MCP` with the actual absolute path where you cloned the repository.
+> **Note:** Replace `C:\Users\YourUsername\path\to\Smartschool-MCP` with the actual absolute path where you cloned the repository.
 
 **Config file locations:**
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
