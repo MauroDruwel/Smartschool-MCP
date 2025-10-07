@@ -1,5 +1,7 @@
 # Smartschool MCP Server
 
+<!-- mcp-name: io.github.maurodruwel/smartschool-mcp -->
+
 A Model Context Protocol (MCP) server that enables AI assistants to interact with the Smartschool platform, providing access to courses, grades, assignments, and messages.
 
 ## Overview

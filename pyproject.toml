@@ -1,10 +1,10 @@
 [project]
 name = "smartschool-mcp"
 version = "0.1.0"
-description = "Add your description here"
+description = "Access Smartschool courses, grades, assignments, and messages through the Model Context Protocol"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "mcp[cli]>=1.9.4",
-    "smartschool @ git+https://github.com/maurodruwel/smartschool.git@withouttest"
+    "smartschool"
 ]
