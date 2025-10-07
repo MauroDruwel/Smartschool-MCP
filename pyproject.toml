@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "smartschool-mcp"
-version = "0.1.3"
+version = "0.1.4"
 description = "Access Smartschool courses, grades, assignments, and messages through the Model Context Protocol"
 readme = "README.md"
 authors = [{name = "Mauro Druwel", email = "mauro.druwel@gmail.com"}]
@@ -38,6 +38,9 @@ dev = [
 Homepage = "https://github.com/MauroDruwel/Smartschool-MCP"
 Repository = "https://github.com/MauroDruwel/Smartschool-MCP"
 Issues = "https://github.com/MauroDruwel/Smartschool-MCP/issues"
+
+[project.scripts]
+smartschool-mcp = "smartschool_mcp.__main__:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["smartschool_mcp"]
