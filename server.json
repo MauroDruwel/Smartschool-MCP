@@ -3,12 +3,12 @@
   "name": "io.github.maurodruwel/smartschool-mcp",
   "title": "Smartschool MCP Server",
   "description": "Access Smartschool courses, grades, assignments, and messages through the Model Context Protocol",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "smartschool-mcp",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "transport": {
         "type": "stdio"
       }
