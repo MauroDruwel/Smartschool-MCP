@@ -3,9 +3,10 @@ Smartschool MCP Server
 Provides tools to interact with Smartschool API for courses, results and tasks.
 """
 
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from mcp.server.fastmcp import FastMCP
-from smartschool import Courses, EnvCredentials, Smartschool, Results, ResultDetail, FutureTasks, MessageHeaders, Message, BoxType
+from smartschool import Attachments, Courses, EnvCredentials, Smartschool, Results, ResultDetail, FutureTasks, MessageHeaders, Message, BoxType
 
 # Initialize MCP server and Smartschool session
 mcp = FastMCP("Smartschool MCP")
@@ -312,6 +313,7 @@ def get_messages(
                 except Exception:
                     continue
             
+            attachment_count = getattr(header, 'attachment', 0) or 0
             message_data = {
                 "id": getattr(header, 'id', None),
                 "from": getattr(full_message, 'from_', 'Unknown Sender'),
@@ -319,6 +321,8 @@ def get_messages(
                 "date": _safe_format_date(getattr(header, 'date', None)),
                 "read": getattr(header, 'read', None),
                 "priority": getattr(header, 'priority', None),
+                "has_attachments": attachment_count > 0,
+                "attachment_count": attachment_count,
             }
             
             # Include body only if requested
@@ -352,3 +356,95 @@ def get_messages(
     
     except Exception as e:
         return {"error": f"Failed to retrieve messages: {str(e)}"}
+
+
+@mcp.tool()
+def get_attachments(message_id: int) -> Dict[str, Any]:
+    """
+    List all attachments for a specific message.
+
+    Args:
+        message_id: The ID of the message to get attachments for (from get_messages results).
+
+    Returns:
+        Dictionary with attachment list including file names, sizes, and IDs for downloading.
+
+    Examples:
+        - get_attachments(249184) -> List attachments for message 249184
+    """
+    try:
+        attachments = Attachments(session, msg_id=message_id)
+        attachments_list = [
+            {
+                "file_id": getattr(attachment, 'fileID', None),
+                "name": getattr(attachment, 'name', 'Unknown'),
+                "mime_type": getattr(attachment, 'mime', 'Unknown'),
+                "size": getattr(attachment, 'size', 'Unknown'),
+            }
+            for attachment in attachments
+        ]
+
+        return {
+            "message_id": message_id,
+            "attachments": attachments_list,
+            "total": len(attachments_list),
+        }
+
+    except Exception as e:
+        return {"error": f"Failed to retrieve attachments: {str(e)}"}
+
+
+@mcp.tool()
+def download_attachment(message_id: int, file_id: int) -> Dict[str, Any]:
+    """
+    Download a specific attachment from a message to ~/Downloads/smartschool/.
+
+    Args:
+        message_id: The ID of the message containing the attachment.
+        file_id: The file ID of the attachment to download (from get_attachments results).
+
+    Returns:
+        Dictionary with the saved file path, filename, mime type, and bytes written.
+
+    Examples:
+        - download_attachment(249184, 12345) -> Download attachment 12345 from message 249184
+    """
+    try:
+        attachments = Attachments(session, msg_id=message_id)
+
+        for attachment in attachments:
+            if str(getattr(attachment, 'fileID', None)) == str(file_id):
+                # Download raw binary content directly (the library's download() method
+                # incorrectly base64-decodes raw binary responses)
+                resp = session.get(f"/?module=Messages&file=download&fileID={file_id}&target=0")
+                if not resp.ok:
+                    return {"error": f"Failed to download: HTTP {resp.status_code}"}
+
+                download_dir = Path.home() / "Downloads" / "smartschool"
+                download_dir.mkdir(parents=True, exist_ok=True)
+
+                filename = Path(getattr(attachment, 'name', '') or '').name or f'attachment_{file_id}'
+                file_path = download_dir / filename
+
+                # Avoid overwriting existing files
+                counter = 1
+                original_stem = file_path.stem
+                while file_path.exists():
+                    file_path = download_dir / f"{original_stem} ({counter}){file_path.suffix}"
+                    counter += 1
+
+                file_path.write_bytes(resp.content)
+
+                return {
+                    "file_id": file_id,
+                    "name": filename,
+                    "mime_type": getattr(attachment, 'mime', 'Unknown'),
+                    "size": getattr(attachment, 'size', 'Unknown'),
+                    "saved_to": str(file_path),
+                    "bytes_written": len(resp.content),
+                }
+
+        return {"error": f"Attachment with file_id {file_id} not found in message {message_id}"}
+
+    except Exception as e:
+        return {"error": f"Failed to download attachment: {str(e)}"}
