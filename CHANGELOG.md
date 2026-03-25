@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `get_attachments(message_id)` — list all attachments for a message (name, mime type, size, file ID)
+- `download_attachment(message_id, file_id, save_path?)` — download an attachment; defaults to `~/Downloads/smartschool/`, accepts optional `save_path`
+- `has_attachments` and `attachment_count` fields in every `get_messages` result
+
+### Fixed
+
+- `download_attachment` calls `session.get()` directly instead of the upstream library's `Attachment.download()`, which incorrectly base64-decodes a raw binary response (upstream bug)
+
 ## [0.2.0] - 2026-03-25
 
 ### Added

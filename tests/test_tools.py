@@ -168,3 +168,93 @@ def test_get_results_pagination() -> None:
     assert result["pagination"]["returned"] == 5
     assert result["pagination"]["offset"] == 10
     assert result["pagination"]["has_more"] is True
+
+
+def test_get_messages_includes_attachment_fields() -> None:
+    mock_header = MagicMock()
+    mock_header.id = 1
+    mock_header.from_ = "teacher@school.be"
+    mock_header.subject = "Homework"
+    mock_header.date = None
+    mock_header.unread = False
+    mock_header.priority = None
+    # Simulate the library using 'attachments' as the field name
+    mock_header.attachments = 2
+    # Ensure getattr fallback for 'attachment' doesn't interfere
+    del mock_header.attachment
+
+    with patch("smartschool_mcp.server.MessageHeaders", return_value=[mock_header]):
+        result = srv.get_messages(include_body=False)
+
+    msg = result["messages"][0]
+    assert msg["has_attachments"] is True
+    assert msg["attachment_count"] == 2
+
+
+def test_get_attachments_happy_path() -> None:
+    mock_att = MagicMock()
+    mock_att.fileID = 42
+    mock_att.name = "homework.pdf"
+    mock_att.mime = "application/pdf"
+    mock_att.size = "100 KB"
+
+    with patch("smartschool_mcp.server.Attachments", return_value=[mock_att]):
+        result = srv.get_attachments(message_id=999)
+
+    assert result["message_id"] == 999
+    assert result["total"] == 1
+    assert result["attachments"][0] == {
+        "file_id": 42,
+        "name": "homework.pdf",
+        "mime_type": "application/pdf",
+        "size": "100 KB",
+    }
+
+
+def test_get_attachments_returns_error_on_exception() -> None:
+    with patch("smartschool_mcp.server.Attachments", side_effect=RuntimeError("network")):
+        result = srv.get_attachments(message_id=999)
+    assert "error" in result
+    assert "network" in result["error"]
+
+
+def test_download_attachment_not_found() -> None:
+    with patch("smartschool_mcp.server.Attachments", return_value=[]):
+        result = srv.download_attachment(message_id=999, file_id=42)
+    assert "error" in result
+    assert "not found" in result["error"]
+
+
+def test_download_attachment_writes_file(tmp_path) -> None:
+    mock_att = MagicMock()
+    mock_att.fileID = 42
+    mock_att.name = "report.pdf"
+    mock_att.mime = "application/pdf"
+    mock_att.size = "50 KB"
+
+    mock_resp = MagicMock()
+    mock_resp.ok = True
+    mock_resp.content = b"PDF content"
+
+    mock_session = MagicMock()
+    mock_session.get.return_value = mock_resp
+
+    with (
+        patch("smartschool_mcp.server.Attachments", return_value=[mock_att]),
+        patch("smartschool_mcp.server._session", return_value=mock_session),
+    ):
+        result = srv.download_attachment(
+            message_id=999,
+            file_id=42,
+            save_path=str(tmp_path),
+        )
+
+    assert result["name"] == "report.pdf"
+    assert result["bytes_written"] == len(b"PDF content")
+    assert (tmp_path / "report.pdf").read_bytes() == b"PDF content"
+
+
+def test_download_attachment_returns_error_on_exception() -> None:
+    with patch("smartschool_mcp.server.Attachments", side_effect=RuntimeError("boom")):
+        result = srv.download_attachment(message_id=999, file_id=42)
+    assert "error" in result
