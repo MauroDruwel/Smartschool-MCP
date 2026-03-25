@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & Discussions
+    url: https://github.com/MauroDruwel/Smartschool-MCP/discussions
+    about: Ask questions and discuss ideas here rather than opening an issue.
+  - name: smartschool library issues
+    url: https://github.com/svaningelgem/smartschool/issues
+    about: Issues with the underlying smartschool Python library go here.

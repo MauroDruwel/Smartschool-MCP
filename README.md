@@ -2,6 +2,12 @@
 
 <!-- mcp-name: io.github.MauroDruwel/smartschool-mcp -->
 
+[![CI](https://github.com/MauroDruwel/Smartschool-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/MauroDruwel/Smartschool-MCP/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/MauroDruwel/Smartschool-MCP/branch/main/graph/badge.svg)](https://codecov.io/gh/MauroDruwel/Smartschool-MCP)
+[![License: MIT](https://img.shields.io/github/license/MauroDruwel/Smartschool-MCP)](LICENSE)
+[![PyPI version](https://img.shields.io/pypi/v/smartschool-mcp)](https://pypi.org/project/smartschool-mcp/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+
 A Model Context Protocol (MCP) server that enables AI assistants to interact with the Smartschool platform, providing access to courses, grades, assignments, and messages.
 
 ## Overview
@@ -22,26 +28,48 @@ Fetch student grades and results with detailed information.
 - Supports pagination with `limit` and `offset` parameters
 - Filter by course name using `course_filter`
 - Optional detailed statistics (average, median) with `include_details`
-- Includes score descriptions, dates, and feedback
+- Includes score descriptions, achieved/total points, percentage, dates, and feedback
 
 ### 📝 `get_future_tasks`
 Get upcoming assignments and tasks organized by date.
 - Shows all future assignments
 - Organized by date and course
-- Includes task descriptions and labels
+- Includes task descriptions, labels, and warnings
 
 ### 📧 `get_messages`
 Access mailbox messages with powerful filtering options.
-- Choose mailbox type: `INBOX`, `SENT`, `DRAFT`, etc.
-- Search messages by content with `search_query`
-- Filter by sender with `sender_filter`
+- Choose mailbox type: `INBOX`, `SENT`, `DRAFT`, `SCHEDULED`, `TRASH`
+- Search messages by content with `search_query` (checks subject first, then body)
+- Filter by sender with `sender_filter` (no extra API calls)
 - Optional full message body with `include_body`
 - Pagination support
+
+### 🗓 `get_schedule`
+Retrieve the lesson schedule for a specific day.
+- Use `date_offset` to get today (0), tomorrow (1), yesterday (-1), etc.
+- Includes course, classroom, teacher, subject notes, and assignment statuses
+
+### 📅 `get_periods`
+Retrieve academic terms/periods for the current school year.
+- Shows period name, active status, class, and school year date range
+
+### 📋 `get_reports`
+Retrieve available academic report cards.
+- Lists report names, dates, class, and school year label
+
+### 🗒 `get_planned_elements`
+Retrieve planned assignments and to-dos from the Smartschool planner.
+- Fetches up to `days_ahead` days (default: 34)
+- Includes assignment type, courses, dates, colors, and confirmation status
+
+### 🔗 `get_student_support_links`
+Retrieve school support resources and links.
+- Returns all visible support links with name, description, and URL
 
 ## Installation
 
 [![PyPI version](https://badge.fury.io/py/smartschool-mcp.svg)](https://pypi.org/project/smartschool-mcp/)
-[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
 ### Prerequisites
 
@@ -110,6 +138,10 @@ Once installed and configured with Claude Desktop or another MCP client, you can
 - "Do I have any new messages?"
 - "What's my average grade in Math?"
 - "Show me messages from my teacher about the project"
+- "What's my schedule for tomorrow?"
+- "What academic periods are active this year?"
+- "Are my report cards available?"
+- "What assignments do I have planned for next week?"
 
 ### Tool Usage Examples
 
@@ -136,6 +168,74 @@ get_messages(
     sender_filter="teacher",
     include_body=True
 )
+```
+
+## Remote MCP (claude.ai)
+
+You can add this server directly to [claude.ai](https://claude.ai) as a remote MCP integration. The server uses the **Streamable HTTP** transport — the modern MCP standard for remote servers.
+
+### 1. Start the server in HTTP mode
+
+```bash
+# Basic – no authentication
+smartschool-mcp --transport streamable-http --port 8000
+
+# With a Bearer token (recommended for public servers)
+MCP_API_KEY=mysecret smartschool-mcp --transport streamable-http --port 8000
+```
+
+All Smartschool credentials still come from the same environment variables:
+
+```bash
+export SMARTSCHOOL_USERNAME="..."
+export SMARTSCHOOL_PASSWORD="..."
+export SMARTSCHOOL_MAIN_URL="school.smartschool.be"
+export SMARTSCHOOL_MFA="YYYY-MM-DD"
+export MCP_API_KEY="a-long-random-secret"   # optional but recommended
+
+smartschool-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+```
+
+> **CLI flags can also be set via environment variables:**
+> `MCP_TRANSPORT`, `MCP_HOST`, `MCP_PORT`, `MCP_API_KEY`
+
+### 2. Make the server publicly accessible (HTTPS)
+
+Claude.ai requires the server to be reachable over HTTPS. A few easy options:
+
+| Option | How |
+|--------|-----|
+| **Cloudflare Tunnel** | `cloudflared tunnel --url http://localhost:8000` — free, no port forwarding needed |
+| **ngrok** | `ngrok http 8000` — free tier, temporary URL |
+| **VPS / cloud** | Put the server behind nginx or Caddy with a Let's Encrypt cert |
+
+The MCP endpoint will be at: `https://your-domain.example.com/mcp`
+
+### 3. Add to claude.ai
+
+1. Go to **claude.ai → Settings → Integrations**
+2. Click **Add custom integration**
+3. Enter the URL: `https://your-domain.example.com/mcp`
+4. If you set `MCP_API_KEY`, add the header `Authorization: Bearer <your-key>`
+5. Save — Claude will automatically discover all available tools
+
+### Claude Desktop Configuration (HTTP variant)
+
+```json
+{
+  "mcpServers": {
+    "smartschool": {
+      "command": "smartschool-mcp",
+      "args": ["--transport", "streamable-http", "--port", "8000"],
+      "env": {
+        "SMARTSCHOOL_USERNAME": "your_username",
+        "SMARTSCHOOL_PASSWORD": "your_password",
+        "SMARTSCHOOL_MAIN_URL": "your-school.smartschool.be",
+        "SMARTSCHOOL_MFA": "YYYY-MM-DD"
+      }
+    }
+  }
+}
 ```
 
 ## Claude Desktop Configuration
@@ -249,15 +349,19 @@ Add this configuration to your `claude_desktop_config.json`:
 ### Project Structure
 ```
 Smartschool-MCP/
-├── main.py              # Main MCP server implementation
+├── smartschool_mcp/
+│   ├── __init__.py      # Package version
+│   ├── __main__.py      # Entry point (python -m smartschool_mcp)
+│   └── server.py        # MCP server & tool definitions
+├── main.py              # Backward-compatibility shim
 ├── pyproject.toml       # Project dependencies and metadata
-├── README.md            # This file
-└── uv.lock              # Locked dependencies
+├── server.json          # MCP server manifest
+└── README.md            # This file
 ```
 
 ### Dependencies
 - `mcp[cli]>=1.9.4` - Model Context Protocol SDK
-- `smartschool` - Smartschool API wrapper (custom fork)
+- `smartschool` - Smartschool API wrapper (https://github.com/svaningelgem/smartschool)
 
 ### Contributing
 

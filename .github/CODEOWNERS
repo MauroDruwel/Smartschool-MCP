@@ -1,0 +1,17 @@
+# Code Owners
+# These owners are automatically requested for review on every pull request.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything
+*                           @MauroDruwel
+
+# Server implementation
+smartschool_mcp/server.py   @MauroDruwel
+smartschool_mcp/__main__.py @MauroDruwel
+
+# CI/CD & infrastructure
+.github/                    @MauroDruwel
+
+# Dependencies
+pyproject.toml              @MauroDruwel
+uv.lock                     @MauroDruwel
