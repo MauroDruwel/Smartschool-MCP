@@ -73,16 +73,15 @@ def get_courses() -> list[dict[str, Any]]:
         List of courses with name and teacher information.
     """
     try:
-        courses = Courses(_session())
         courses_list = []
-        
-        for course in courses:
+
+        for course in Courses(_session()):
             teacher_names = _safe_get_teacher_names(course.teachers, use_last_name=True)
             courses_list.append({
                 "name": course.name,
                 "teachers": teacher_names,
             })
-        
+
         return courses_list
     
     except Exception as e:
