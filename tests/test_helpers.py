@@ -5,10 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from unittest.mock import MagicMock
 
-import pytest
-
 from smartschool_mcp.server import _safe_format_date, _safe_get_teacher_names
-
 
 # ── _safe_format_date ─────────────────────────────────────────────────────────
 

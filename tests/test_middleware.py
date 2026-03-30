@@ -13,7 +13,10 @@ from smartschool_mcp.__main__ import _BearerAuthMiddleware
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def _make_scope(scope_type: str = "http", headers: list[tuple[bytes, bytes]] | None = None) -> dict[str, Any]:
+def _make_scope(
+    scope_type: str = "http",
+    headers: list[tuple[bytes, bytes]] | None = None,
+) -> dict[str, Any]:
     return {
         "type": scope_type,
         "headers": headers or [],

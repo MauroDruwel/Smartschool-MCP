@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 import smartschool_mcp.server as srv
 
 # ── Tool registration ─────────────────────────────────────────────────────────
@@ -53,21 +51,27 @@ def test_get_results_returns_error_on_exception() -> None:
 
 
 def test_get_future_tasks_returns_error_on_exception() -> None:
-    with patch("smartschool_mcp.server.FutureTasks", side_effect=RuntimeError("timeout")):
+    with patch(
+        "smartschool_mcp.server.FutureTasks", side_effect=RuntimeError("timeout")
+    ):
         result = srv.get_future_tasks()
     assert isinstance(result, dict)
     assert "error" in result
 
 
 def test_get_messages_returns_error_on_exception() -> None:
-    with patch("smartschool_mcp.server.MessageHeaders", side_effect=RuntimeError("403")):
+    with patch(
+        "smartschool_mcp.server.MessageHeaders", side_effect=RuntimeError("403")
+    ):
         result = srv.get_messages()
     assert isinstance(result, dict)
     assert "error" in result
 
 
 def test_get_schedule_returns_error_on_exception() -> None:
-    with patch("smartschool_mcp.server.SmartschoolLessons", side_effect=RuntimeError("503")):
+    with patch(
+        "smartschool_mcp.server.SmartschoolLessons", side_effect=RuntimeError("503")
+    ):
         result = srv.get_schedule()
     assert isinstance(result, dict)
     assert "error" in result
@@ -88,14 +92,18 @@ def test_get_reports_returns_error_on_exception() -> None:
 
 
 def test_get_planned_elements_returns_error_on_exception() -> None:
-    with patch("smartschool_mcp.server.PlannedElements", side_effect=RuntimeError("oops")):
+    with patch(
+        "smartschool_mcp.server.PlannedElements", side_effect=RuntimeError("oops")
+    ):
         result = srv.get_planned_elements()
     assert isinstance(result, dict)
     assert "error" in result
 
 
 def test_get_student_support_links_returns_error_on_exception() -> None:
-    with patch("smartschool_mcp.server.StudentSupportLinks", side_effect=RuntimeError("oops")):
+    with patch(
+        "smartschool_mcp.server.StudentSupportLinks", side_effect=RuntimeError("oops")
+    ):
         result = srv.get_student_support_links()
     assert isinstance(result, list)
     assert "error" in result[0]
@@ -119,7 +127,7 @@ def test_get_future_tasks_counts_tasks_correctly() -> None:
     """total_tasks must count tasks, not dict keys."""
     mock_task = MagicMock()
     mock_task.label = "Read chapter 3"
-    mock_task.description = "Pages 40–60"
+    mock_task.description = "Pages 40-60"
     mock_task.warning = False
 
     mock_items = MagicMock()
@@ -150,7 +158,13 @@ def test_get_results_pagination() -> None:
     mock_result = MagicMock()
     mock_result.courses = [MagicMock(name="Math")]
     mock_result.name = "Test 1"
-    mock_result.graphic = MagicMock(description="8/10", value=8, achieved_points=8.0, total_points=10.0, percentage=0.8)
+    mock_result.graphic = MagicMock(
+        description="8/10",
+        value=8,
+        achieved_points=8.0,
+        total_points=10.0,
+        percentage=0.8,
+    )
     mock_result.date = None
     mock_result.availability_date = None
     mock_result.does_count = True
@@ -168,6 +182,46 @@ def test_get_results_pagination() -> None:
     assert result["pagination"]["returned"] == 5
     assert result["pagination"]["offset"] == 10
     assert result["pagination"]["has_more"] is True
+
+
+def test_get_results_with_details() -> None:
+    mock_result = MagicMock()
+    mock_result.courses = [MagicMock(name="Math")]
+    mock_result.name = "Test 1"
+    mock_result.graphic = MagicMock(
+        description="8/10",
+        value=8,
+        achieved_points=8.0,
+        total_points=10.0,
+        percentage=0.8,
+    )
+    mock_result.date = None
+    mock_result.availability_date = None
+    mock_result.does_count = True
+    mock_result.feedback = []
+    mock_result.gradebook_owner = MagicMock()
+    mock_result.gradebook_owner.name.starting_with_first_name = "John Doe"
+    mock_result.period = MagicMock(name="Period 1")
+
+    avg_tendency = MagicMock()
+    avg_tendency.graphic.description = "7.5/10"
+    avg_tendency.graphic.value = 7.5
+    med_tendency = MagicMock()
+    med_tendency.graphic.description = "7.8/10"
+    med_tendency.graphic.value = 7.8
+    mock_result.details.central_tendencies = [avg_tendency, med_tendency]
+
+    with patch("smartschool_mcp.server.Results", return_value=[mock_result]):
+        result = srv.get_results(limit=5, offset=0, include_details=True)
+
+    assert result["results"][0]["average"] == {
+        "description": "7.5/10",
+        "value": 7.5,
+    }
+    assert result["results"][0]["median"] == {
+        "description": "7.8/10",
+        "value": 7.8,
+    }
 
 
 def test_get_messages_includes_attachment_fields() -> None:
@@ -212,7 +266,9 @@ def test_get_attachments_happy_path() -> None:
 
 
 def test_get_attachments_returns_error_on_exception() -> None:
-    with patch("smartschool_mcp.server.Attachments", side_effect=RuntimeError("network")):
+    with patch(
+        "smartschool_mcp.server.Attachments", side_effect=RuntimeError("network")
+    ):
         result = srv.get_attachments(message_id=999)
     assert "error" in result
     assert "network" in result["error"]

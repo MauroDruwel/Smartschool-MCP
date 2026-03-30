@@ -1,6 +1,7 @@
 """
 Smartschool MCP Server
-Provides tools to interact with Smartschool API for courses, results, tasks, messages and more.
+Provides tools to interact with Smartschool API for courses, results, tasks,
+messages and more.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from smartschool import (
     StudentSupportLinks,
 )
 
-# MCP server – tools are registered via @mcp.tool() decorators below
+# MCP server - tools are registered via @mcp.tool() decorators below
 mcp = FastMCP("Smartschool MCP")
 
 
@@ -42,7 +43,10 @@ def _session() -> Smartschool:
     return Smartschool(EnvCredentials())
 
 
-def _safe_get_teacher_names(teachers: list | None, use_last_name: bool = True) -> list[str]:
+def _safe_get_teacher_names(
+    teachers: list | None,
+    use_last_name: bool = True,
+) -> list[str]:
     """Safely extract teacher names from teacher objects."""
     if not teachers:
         return []
@@ -83,9 +87,9 @@ def get_courses() -> list[dict[str, Any]]:
             })
 
         return courses_list
-    
+
     except Exception as e:
-        return [{"error": f"Failed to retrieve courses: {str(e)}"}]
+        return [{"error": f"Failed to retrieve courses: {e!s}"}]
 
 
 @mcp.tool()
@@ -102,7 +106,8 @@ def get_results(
         limit: Maximum number of results to return (default: 15)
         offset: Number of results to skip from the beginning (default: 0)
         course_filter: Filter results by course name (partial match, case-insensitive)
-        include_details: Whether to fetch detailed info (teacher, average, median) - saves API calls if False
+        include_details: Whether to fetch detailed info (teacher, average, median)
+            - saves API calls if False
 
     Returns:
         Dictionary with results list and pagination info.
@@ -132,7 +137,8 @@ def get_results(
         results_list = []
 
         for result in paginated:
-            # Basic result information (teacher comes from gradebook_owner, no extra API call)
+            # Basic result information (teacher comes from gradebook_owner,
+            # no extra API call)
             graphic = result.graphic
             result_data = {
                 "course": result.courses[0].name if result.courses else "Unknown",
@@ -163,15 +169,17 @@ def get_results(
                         tendencies = detail.central_tendencies
 
                         if len(tendencies) > 0 and hasattr(tendencies[0], "graphic"):
+                            g = tendencies[0].graphic
                             result_data["average"] = {
-                                "description": getattr(tendencies[0].graphic, "description", "N/A"),
-                                "value": getattr(tendencies[0].graphic, "value", None),
+                                "description": getattr(g, "description", "N/A"),
+                                "value": getattr(g, "value", None),
                             }
 
                         if len(tendencies) > 1 and hasattr(tendencies[1], "graphic"):
+                            g = tendencies[1].graphic
                             result_data["median"] = {
-                                "description": getattr(tendencies[1].graphic, "description", "N/A"),
-                                "value": getattr(tendencies[1].graphic, "value", None),
+                                "description": getattr(g, "description", "N/A"),
+                                "value": getattr(g, "value", None),
                             }
 
                 except Exception:
@@ -197,7 +205,7 @@ def get_results(
         }
 
     except Exception as e:
-        return {"error": f"Failed to retrieve results: {str(e)}"}
+        return {"error": f"Failed to retrieve results: {e!s}"}
 
 
 @mcp.tool()
@@ -255,7 +263,7 @@ def get_future_tasks() -> dict[str, Any]:
         }
 
     except Exception as e:
-        return {"error": f"Failed to retrieve future tasks: {str(e)}"}
+        return {"error": f"Failed to retrieve future tasks: {e!s}"}
 
 
 @mcp.tool()
@@ -273,10 +281,13 @@ def get_messages(
     Args:
         limit: Maximum number of messages to return (default: 15)
         offset: Number of messages to skip from the beginning (default: 0)
-        box_type: Type of mailbox - "INBOX", "SENT", "DRAFT", "SCHEDULED", "TRASH" (default: "INBOX")
+        box_type: Type of mailbox - "INBOX", "SENT", "DRAFT", "SCHEDULED",
+            "TRASH" (default: "INBOX")
         search_query: Search in subject and body content (case-insensitive)
-        sender_filter: Filter messages by sender name (partial match, case-insensitive)
-        include_body: Whether to include full message body (default: False for performance)
+        sender_filter: Filter messages by sender name (partial match,
+            case-insensitive)
+        include_body: Whether to include full message body
+            (default: False for performance)
 
     Returns:
         Dictionary with messages list and pagination info.
@@ -284,7 +295,8 @@ def get_messages(
     Examples:
         - get_messages() -> First 15 inbox messages (headers only)
         - get_messages(search_query="homework") -> Messages containing "homework"
-        - get_messages(sender_filter="teacher") -> Messages from senders containing "teacher"
+        - get_messages(sender_filter="teacher") -> Messages from senders containing
+          "teacher"
         - get_messages(include_body=True) -> Full messages with body content
     """
     try:
@@ -304,7 +316,8 @@ def get_messages(
                 if sender_filter.lower() in (getattr(h, 'from_', '') or '').lower()
             ]
 
-        # Apply search query: check subject first, only fetch body when subject doesn't match
+        # Apply search query: check subject first, only fetch body when subject
+        # doesn't match
         if search_query:
             matched = []
             for header in all_headers:
@@ -330,7 +343,11 @@ def get_messages(
         messages_list = []
 
         for header in paginated:
-            attachment_count = getattr(header, "attachments", None) or getattr(header, "attachment", 0) or 0
+            attachment_count = (
+                getattr(header, "attachments", None)
+                or getattr(header, "attachment", 0)
+                or 0
+            )
             message_data = {
                 "id": getattr(header, "id", None),
                 "from": getattr(header, "from_", "Unknown Sender"),
@@ -353,7 +370,9 @@ def get_messages(
             else:
                 if cached:
                     body = getattr(cached, 'body', '') or ''
-                    message_data["body_preview"] = body[:100] + "..." if len(body) > 100 else body
+                    message_data["body_preview"] = (
+                        body[:100] + "..." if len(body) > 100 else body
+                    )
                 else:
                     message_data["body_preview"] = None
 
@@ -378,7 +397,7 @@ def get_messages(
         }
 
     except Exception as e:
-        return {"error": f"Failed to retrieve messages: {str(e)}"}
+        return {"error": f"Failed to retrieve messages: {e!s}"}
 
 
 @mcp.tool()
@@ -387,7 +406,8 @@ def get_schedule(date_offset: int = 0) -> dict[str, Any]:
     Retrieve the lesson schedule for a given day.
 
     Args:
-        date_offset: Days from today (0 = today, 1 = tomorrow, -1 = yesterday, default: 0)
+        date_offset: Days from today (0=today, 1=tomorrow, -1=yesterday,
+            default: 0)
 
     Returns:
         Dictionary with the lessons scheduled for the given date.
@@ -418,7 +438,7 @@ def get_schedule(date_offset: int = 0) -> dict[str, Any]:
         }
 
     except Exception as e:
-        return {"error": f"Failed to retrieve schedule: {str(e)}"}
+        return {"error": f"Failed to retrieve schedule: {e!s}"}
 
 
 @mcp.tool()
@@ -437,14 +457,18 @@ def get_periods() -> list[dict[str, Any]]:
                 "name": period.name,
                 "is_active": period.is_active,
                 "class": period.class_.name if period.class_ else None,
-                "school_year_start": _safe_format_date(period.skore_work_year.date_range.start),
-                "school_year_end": _safe_format_date(period.skore_work_year.date_range.end),
+                "school_year_start": _safe_format_date(
+                    period.skore_work_year.date_range.start
+                ),
+                "school_year_end": _safe_format_date(
+                    period.skore_work_year.date_range.end
+                ),
             })
 
         return periods_list
 
     except Exception as e:
-        return [{"error": f"Failed to retrieve periods: {str(e)}"}]
+        return [{"error": f"Failed to retrieve periods: {e!s}"}]
 
 
 @mcp.tool()
@@ -469,7 +493,7 @@ def get_reports() -> list[dict[str, Any]]:
         return reports_list
 
     except Exception as e:
-        return [{"error": f"Failed to retrieve reports: {str(e)}"}]
+        return [{"error": f"Failed to retrieve reports: {e!s}"}]
 
 
 @mcp.tool()
@@ -493,13 +517,19 @@ def get_planned_elements(days_ahead: int = 34) -> dict[str, Any]:
             element_data = {
                 "name": element.name,
                 "type": element.planned_element_type,
-                "from": period.date_time_from.strftime('%Y-%m-%d %H:%M') if period else None,
-                "to": period.date_time_to.strftime('%Y-%m-%d %H:%M') if period else None,
+                "from": (
+                    period.date_time_from.strftime('%Y-%m-%d %H:%M') if period else None
+                ),
+                "to": (
+                    period.date_time_to.strftime('%Y-%m-%d %H:%M') if period else None
+                ),
                 "color": element.color,
                 "courses": [c.name for c in element.courses] if element.courses else [],
                 "unconfirmed": element.unconfirmed,
                 "pinned": element.pinned,
-                "assignment_type": element.assignment_type.name if element.assignment_type else None,
+                "assignment_type": (
+                    element.assignment_type.name if element.assignment_type else None
+                ),
             }
             elements_list.append(element_data)
 
@@ -513,7 +543,7 @@ def get_planned_elements(days_ahead: int = 34) -> dict[str, Any]:
         }
 
     except Exception as e:
-        return {"error": f"Failed to retrieve planned elements: {str(e)}"}
+        return {"error": f"Failed to retrieve planned elements: {e!s}"}
 
 
 @mcp.tool()
@@ -538,7 +568,7 @@ def get_student_support_links() -> list[dict[str, Any]]:
         return links_list
 
     except Exception as e:
-        return [{"error": f"Failed to retrieve support links: {str(e)}"}]
+        return [{"error": f"Failed to retrieve support links: {e!s}"}]
 
 
 @mcp.tool()
@@ -547,10 +577,12 @@ def get_attachments(message_id: int) -> dict[str, Any]:
     List all attachments for a specific message.
 
     Args:
-        message_id: The ID of the message to get attachments for (from get_messages results).
+        message_id: The ID of the message to get attachments for
+            (from get_messages results).
 
     Returns:
-        Dictionary with attachment list including file names, sizes, and IDs for downloading.
+        Dictionary with attachment list including file names, sizes, and IDs
+        for downloading.
 
     Examples:
         - get_attachments(249184) -> List attachments for message 249184
@@ -571,7 +603,7 @@ def get_attachments(message_id: int) -> dict[str, Any]:
             "total": len(attachments_list),
         }
     except Exception as e:
-        return {"error": f"Failed to retrieve attachments: {str(e)}"}
+        return {"error": f"Failed to retrieve attachments: {e!s}"}
 
 
 @mcp.tool()
@@ -620,7 +652,9 @@ def download_attachment(
         if not resp.ok:
             return {"error": f"Download failed: HTTP {resp.status_code}"}
 
-        download_dir = Path(save_path) if save_path else Path.home() / "Downloads" / "smartschool"
+        download_dir = (
+            Path(save_path) if save_path else Path.home() / "Downloads" / "smartschool"
+        )
         download_dir.mkdir(parents=True, exist_ok=True)
 
         # Sanitise filename to prevent path-traversal attacks
@@ -647,4 +681,4 @@ def download_attachment(
         }
 
     except Exception as e:
-        return {"error": f"Failed to download attachment: {str(e)}"}
+        return {"error": f"Failed to download attachment: {e!s}"}

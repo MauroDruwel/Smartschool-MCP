@@ -3,8 +3,8 @@ Main entry point for the Smartschool MCP server.
 Can be run as: python -m smartschool_mcp or smartschool-mcp
 
 Supports two transports:
-  stdio             (default) – for Claude Desktop / local MCP clients
-  streamable-http             – for remote MCP clients such as claude.ai
+  stdio             (default) - for Claude Desktop / local MCP clients
+  streamable-http             - for remote MCP clients such as claude.ai
 
 Environment variables (all overridable by CLI flags):
   MCP_TRANSPORT   stdio | streamable-http  (default: stdio)
@@ -16,6 +16,7 @@ Environment variables (all overridable by CLI flags):
 from __future__ import annotations
 
 import argparse
+import hmac
 import os
 
 from smartschool_mcp.server import mcp
@@ -93,7 +94,10 @@ def _run_http(host: str, port: int) -> None:
     api_key = os.environ.get("MCP_API_KEY")
     if api_key:
         app = _BearerAuthMiddleware(app, api_key)
-        print(f"[smartschool-mcp] Bearer auth enabled – set Authorization: Bearer <MCP_API_KEY>")
+        print(
+            "[smartschool-mcp] Bearer auth enabled - "
+            "set Authorization: Bearer <MCP_API_KEY>"
+        )
 
     print(f"[smartschool-mcp] Listening on http://{host}:{port}/mcp")
     uvicorn.run(app, host=host, port=port)
@@ -104,13 +108,16 @@ class _BearerAuthMiddleware:
 
     def __init__(self, app, token: str) -> None:
         self.app = app
-        self.token = token
+        self.token = token.encode()
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] == "http":
             headers = {k.lower(): v for k, v in scope.get("headers", [])}
             auth = headers.get(b"authorization", b"").decode()
-            if not (auth.startswith("Bearer ") and auth[7:] == self.token):
+            if not (
+                auth.startswith("Bearer ")
+                and hmac.compare_digest(auth[7:].encode(), self.token)
+            ):
                 await self._reject(send)
                 return
         await self.app(scope, receive, send)
