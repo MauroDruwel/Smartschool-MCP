@@ -63,7 +63,7 @@ def _safe_get_teacher_names(
 def _safe_format_date(date_obj: Any) -> str | None:
     """Safely format date objects to string."""
     try:
-        return date_obj.strftime('%Y-%m-%d') if date_obj else None
+        return date_obj.strftime("%Y-%m-%d") if date_obj else None
     except (AttributeError, ValueError):
         return None
 
@@ -81,10 +81,12 @@ def get_courses() -> list[dict[str, Any]]:
 
         for course in Courses(_session()):
             teacher_names = _safe_get_teacher_names(course.teachers, use_last_name=True)
-            courses_list.append({
-                "name": course.name,
-                "teachers": teacher_names,
-            })
+            courses_list.append(
+                {
+                    "name": course.name,
+                    "teachers": teacher_names,
+                }
+            )
 
         return courses_list
 
@@ -249,12 +251,12 @@ def get_future_tasks() -> dict[str, Any]:
                 }
 
                 # Extract tasks from the course
-                if hasattr(course, 'items') and hasattr(course.items, 'tasks'):
+                if hasattr(course, "items") and hasattr(course.items, "tasks"):
                     for task in course.items.tasks:
                         task_data: _TaskDict = {
-                            "label": getattr(task, 'label', 'N/A'),
-                            "description": getattr(task, 'description', 'N/A'),
-                            "warning": getattr(task, 'warning', False),
+                            "label": getattr(task, "label", "N/A"),
+                            "description": getattr(task, "description", "N/A"),
+                            "warning": getattr(task, "warning", False),
                         }
                         course_data["tasks"].append(task_data)
 
@@ -267,9 +269,7 @@ def get_future_tasks() -> dict[str, Any]:
                 tasks_data.append(day_data)
 
         total_tasks = sum(
-            len(course["tasks"])
-            for day in tasks_data
-            for course in day["courses"]
+            len(course["tasks"]) for day in tasks_data for course in day["courses"]
         )
 
         return {
@@ -328,8 +328,9 @@ def get_messages(
         # Apply sender filter directly from headers (no full message fetch needed)
         if sender_filter:
             all_headers = [
-                h for h in all_headers
-                if sender_filter.lower() in (getattr(h, 'from_', '') or '').lower()
+                h
+                for h in all_headers
+                if sender_filter.lower() in (getattr(h, "from_", "") or "").lower()
             ]
 
         # Apply search query: check subject first, only fetch body when subject
@@ -337,7 +338,7 @@ def get_messages(
         if search_query:
             matched = []
             for header in all_headers:
-                subject = (getattr(header, 'subject', '') or '').lower()
+                subject = (getattr(header, "subject", "") or "").lower()
                 if search_query.lower() in subject:
                     matched.append(header)
                     continue
@@ -380,12 +381,12 @@ def get_messages(
             if include_body:
                 try:
                     full_msg = cached or Message(_session(), header.id).get()
-                    message_data["body"] = getattr(full_msg, 'body', '')
+                    message_data["body"] = getattr(full_msg, "body", "")
                 except Exception:
-                    message_data["body"] = ''
+                    message_data["body"] = ""
             else:
                 if cached:
-                    body = getattr(cached, 'body', '') or ''
+                    body = getattr(cached, "body", "") or ""
                     message_data["body_preview"] = (
                         body[:100] + "..." if len(body) > 100 else body
                     )
@@ -433,22 +434,24 @@ def get_schedule(date_offset: int = 0) -> dict[str, Any]:
         lessons_list = []
 
         for lesson in SmartschoolLessons(_session(), timestamp_to_use=target_date):
-            lessons_list.append({
-                "moment_id": lesson.moment_id,
-                "date": _safe_format_date(lesson.date),
-                "hour": lesson.hour,
-                "course": lesson.course_title,
-                "classroom": lesson.classroom_title,
-                "teacher": lesson.teacher_title,
-                "subject": lesson.subject,
-                "note": lesson.note,
-                "color": lesson.color,
-                "assignment_end_status": lesson.assignment_end_status,
-                "test_deadline_status": lesson.test_deadline_status,
-            })
+            lessons_list.append(
+                {
+                    "moment_id": lesson.moment_id,
+                    "date": _safe_format_date(lesson.date),
+                    "hour": lesson.hour,
+                    "course": lesson.course_title,
+                    "classroom": lesson.classroom_title,
+                    "teacher": lesson.teacher_title,
+                    "subject": lesson.subject,
+                    "note": lesson.note,
+                    "color": lesson.color,
+                    "assignment_end_status": lesson.assignment_end_status,
+                    "test_deadline_status": lesson.test_deadline_status,
+                }
+            )
 
         return {
-            "date": target_date.strftime('%Y-%m-%d'),
+            "date": target_date.strftime("%Y-%m-%d"),
             "lessons": lessons_list,
             "total": len(lessons_list),
         }
@@ -469,17 +472,19 @@ def get_periods() -> list[dict[str, Any]]:
         periods_list = []
 
         for period in Periods(_session()):
-            periods_list.append({
-                "name": period.name,
-                "is_active": period.is_active,
-                "class": period.class_.name if period.class_ else None,
-                "school_year_start": _safe_format_date(
-                    period.skore_work_year.date_range.start
-                ),
-                "school_year_end": _safe_format_date(
-                    period.skore_work_year.date_range.end
-                ),
-            })
+            periods_list.append(
+                {
+                    "name": period.name,
+                    "is_active": period.is_active,
+                    "class": period.class_.name if period.class_ else None,
+                    "school_year_start": _safe_format_date(
+                        period.skore_work_year.date_range.start
+                    ),
+                    "school_year_end": _safe_format_date(
+                        period.skore_work_year.date_range.end
+                    ),
+                }
+            )
 
         return periods_list
 
@@ -499,12 +504,14 @@ def get_reports() -> list[dict[str, Any]]:
         reports_list = []
 
         for report in Reports(_session()):
-            reports_list.append({
-                "name": report.name,
-                "date": _safe_format_date(report.date),
-                "class": report.class_.name if report.class_ else None,
-                "schoolyear_label": report.schoolyear_label,
-            })
+            reports_list.append(
+                {
+                    "name": report.name,
+                    "date": _safe_format_date(report.date),
+                    "class": report.class_.name if report.class_ else None,
+                    "schoolyear_label": report.schoolyear_label,
+                }
+            )
 
         return reports_list
 
@@ -529,15 +536,15 @@ def get_planned_elements(days_ahead: int = 34) -> dict[str, Any]:
         elements_list = []
 
         for element in PlannedElements(_session(), till_date=till_date):
-            period = getattr(element, 'period', None)
+            period = getattr(element, "period", None)
             element_data = {
                 "name": element.name,
                 "type": element.planned_element_type,
                 "from": (
-                    period.date_time_from.strftime('%Y-%m-%d %H:%M') if period else None
+                    period.date_time_from.strftime("%Y-%m-%d %H:%M") if period else None
                 ),
                 "to": (
-                    period.date_time_to.strftime('%Y-%m-%d %H:%M') if period else None
+                    period.date_time_to.strftime("%Y-%m-%d %H:%M") if period else None
                 ),
                 "color": element.color,
                 "courses": [c.name for c in element.courses] if element.courses else [],
@@ -553,8 +560,8 @@ def get_planned_elements(days_ahead: int = 34) -> dict[str, Any]:
             "planned_elements": elements_list,
             "total": len(elements_list),
             "period": {
-                "from": from_date.strftime('%Y-%m-%d'),
-                "to": till_date.strftime('%Y-%m-%d'),
+                "from": from_date.strftime("%Y-%m-%d"),
+                "to": till_date.strftime("%Y-%m-%d"),
             },
         }
 
@@ -575,11 +582,13 @@ def get_student_support_links() -> list[dict[str, Any]]:
 
         for link in StudentSupportLinks(_session()):
             if link.is_visible:
-                links_list.append({
-                    "name": link.name,
-                    "description": link.description,
-                    "link": link.clean_link,
-                })
+                links_list.append(
+                    {
+                        "name": link.name,
+                        "description": link.description,
+                        "link": link.clean_link,
+                    }
+                )
 
         return links_list
 

@@ -85,7 +85,7 @@ def _run_http(host: str, port: int) -> None:
     # the Mcp-Session-Id header returned during initialisation.
     app = CORSMiddleware(
         app,
-        allow_origins=["*"],          # tighten to specific origins in production
+        allow_origins=["*"],  # tighten to specific origins in production
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["*"],
         expose_headers=["Mcp-Session-Id"],
@@ -125,14 +125,16 @@ class _BearerAuthMiddleware:
 
     @staticmethod
     async def _reject(send) -> None:
-        await send({
-            "type": "http.response.start",
-            "status": 401,
-            "headers": [
-                [b"content-type", b"application/json"],
-                [b"www-authenticate", b'Bearer realm="Smartschool MCP"'],
-            ],
-        })
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 401,
+                "headers": [
+                    [b"content-type", b"application/json"],
+                    [b"www-authenticate", b'Bearer realm="Smartschool MCP"'],
+                ],
+            }
+        )
         await send({"type": "http.response.body", "body": b'{"error":"Unauthorized"}'})
 
 
