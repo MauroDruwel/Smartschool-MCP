@@ -6,12 +6,14 @@ messages and more.
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from datetime import date, timedelta
 from functools import lru_cache
 from typing import Any, TypedDict
 
 from mcp.server.fastmcp import FastMCP
 from smartschool import (
+    AppCredentials,
     Attachments,
     BoxType,
     Courses,
@@ -31,16 +33,41 @@ from smartschool import (
 # MCP server - tools are registered via @mcp.tool() decorators below
 mcp = FastMCP("Smartschool MCP")
 
+# Per-request credentials, set by _UniversalCredentialMiddleware in universal mode.
+_request_creds: ContextVar[AppCredentials | None] = ContextVar(
+    "_request_creds", default=None
+)
+
+# Session cache keyed by (username, password, main_url, mfa) for universal mode.
+_session_cache: dict[tuple[str, str, str, str], Smartschool] = {}
+
 
 @lru_cache(maxsize=1)
-def _session() -> Smartschool:
-    """Create and cache the Smartschool session.
+def _env_session() -> Smartschool:
+    """Cached session using environment-variable credentials (single-user mode).
 
     Lazy-initialized on first tool invocation so that import-time errors
     (missing env vars, network failures) surface as tool errors rather than
     crashing the process on startup.
     """
     return Smartschool(EnvCredentials())
+
+
+def _session() -> Smartschool:
+    """Return the active Smartschool session.
+
+    In universal mode a per-request AppCredentials object is stored in
+    _request_creds; sessions are cached per unique credentials tuple so that
+    repeated calls reuse the same authenticated session (and its cookie cache).
+    Falls back to the environment-variable session in single-user / stdio mode.
+    """
+    creds = _request_creds.get()
+    if creds is None:
+        return _env_session()
+    key = (creds.username, creds.password, creds.main_url, creds.mfa)
+    if key not in _session_cache:
+        _session_cache[key] = Smartschool(creds)
+    return _session_cache[key]
 
 
 def _safe_get_teacher_names(
