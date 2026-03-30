@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from functools import lru_cache
-from typing import Any
+from typing import Any, TypedDict
 
 from mcp.server.fastmcp import FastMCP
 from smartschool import (
@@ -208,6 +208,22 @@ def get_results(
         return {"error": f"Failed to retrieve results: {e!s}"}
 
 
+class _TaskDict(TypedDict):
+    label: str
+    description: str
+    warning: bool
+
+
+class _CourseDict(TypedDict):
+    name: str
+    tasks: list[_TaskDict]
+
+
+class _DayDict(TypedDict):
+    date: str | None
+    courses: list[_CourseDict]
+
+
 @mcp.tool()
 def get_future_tasks() -> dict[str, Any]:
     """
@@ -218,16 +234,16 @@ def get_future_tasks() -> dict[str, Any]:
     """
     try:
         future_tasks = FutureTasks(_session())
-        tasks_data = []
+        tasks_data: list[_DayDict] = []
 
         for day in future_tasks:
-            day_data = {
+            day_data: _DayDict = {
                 "date": _safe_format_date(day.date),
                 "courses": [],
             }
 
             for course in day.courses:
-                course_data = {
+                course_data: _CourseDict = {
                     "name": course.course_title,
                     "tasks": [],
                 }
@@ -235,7 +251,7 @@ def get_future_tasks() -> dict[str, Any]:
                 # Extract tasks from the course
                 if hasattr(course, 'items') and hasattr(course.items, 'tasks'):
                     for task in course.items.tasks:
-                        task_data = {
+                        task_data: _TaskDict = {
                             "label": getattr(task, 'label', 'N/A'),
                             "description": getattr(task, 'description', 'N/A'),
                             "warning": getattr(task, 'warning', False),

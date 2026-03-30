@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import hmac
 import os
+from typing import Any
 
 from smartschool_mcp.server import mcp
 
@@ -78,7 +79,7 @@ def _run_http(host: str, port: int) -> None:
     mcp.settings.json_response = True
 
     # The ASGI app exposes a single endpoint at /mcp (POST + GET).
-    app = mcp.streamable_http_app()
+    app: Any = mcp.streamable_http_app()
 
     # CORS is required so browser-based clients (including claude.ai) can read
     # the Mcp-Session-Id header returned during initialisation.
