@@ -1,86 +1,88 @@
-name: Publish to MCP Registry
+name: Release
 
 on:
   release:
     types: [published]
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  # ── 1. Build distribution ───────────────────────────────────────────────────
   build:
+    name: Build distribution
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v4
         with:
-          python-version: "3.13"
+          enable-cache: true
 
-      - name: Install build dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install build twine
+      - name: Build sdist and wheel
+        run: uv build
 
-      - name: Build package
-        run: python -m build
+      - name: Verify distribution
+        run: uvx twine check dist/*
 
-      - name: Check distribution
-        run: twine check dist/*
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist/
 
+  # ── 2. Publish to PyPI ──────────────────────────────────────────────────────
   publish-pypi:
+    name: Publish to PyPI
     needs: build
     runs-on: ubuntu-latest
-    environment: 
+    environment:
       name: pypi
       url: https://pypi.org/p/smartschool-mcp
     permissions:
-      id-token: write
+      id-token: write  # OIDC trusted publishing – no API key required
     steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist/
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@release/v1
 
+  # ── 3. Publish to MCP Registry ──────────────────────────────────────────────
   publish-mcp:
+    name: Publish to MCP Registry
     needs: publish-pypi
     runs-on: ubuntu-latest
-    
     permissions:
-      id-token: write  # Required for OIDC authentication
+      id-token: write
       contents: read
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: Update server.json version
+      - name: Stamp server.json with release version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          python -c "import json; data = json.load(open('server.json')); data['version'] = '$VERSION'; data['packages'][0]['version'] = '$VERSION'; json.dump(data, open('server.json', 'w'), indent=2)"
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          python - <<EOF
+          import json, pathlib
+          p = pathlib.Path("server.json")
+          data = json.loads(p.read_text())
+          data["version"] = "$VERSION"
+          data["packages"][0]["version"] = "$VERSION"
+          p.write_text(json.dumps(data, indent=2) + "\n")
+          EOF
 
       - name: Install MCP Publisher
         run: |
-          latest=$(curl -s https://api.github.com/repos/modelcontextprotocol/registry/releases/latest | grep tag_name | cut -d '"' -f 4)
-          version=${latest#v}
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/download/${latest}/mcp-publisher_${version}_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" \
+          LATEST=$(curl -fsSL https://api.github.com/repos/modelcontextprotocol/registry/releases/latest \
+            | grep '"tag_name"' | cut -d '"' -f 4)
+          VERSION="${LATEST#v}"
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/${LATEST}/mcp-publisher_${VERSION}_${OS}_${ARCH}.tar.gz" \
             | tar xz mcp-publisher
 
-      - name: Login to MCP Registry
+      - name: Authenticate with MCP Registry
         run: ./mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry

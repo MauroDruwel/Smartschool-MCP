@@ -1,0 +1,56 @@
+name: Feature Request
+description: Suggest a new tool, improvement, or enhancement
+labels: ["enhancement"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement!
+        Check the [open issues](https://github.com/MauroDruwel/Smartschool-MCP/issues) first
+        to make sure this hasn't already been requested.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What problem does this solve? Why is this useful?
+      placeholder: "I'm always having to do X manually because the MCP server doesn't support Y..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: |
+        Describe the feature you'd like. If it's a new tool, describe what it should
+        return and which Smartschool data it should expose.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any alternative approaches you've considered?
+
+  - type: dropdown
+    id: smartschool_api
+    attributes:
+      label: Is this backed by the official smartschool library?
+      description: |
+        Check https://github.com/svaningelgem/smartschool for available classes.
+      options:
+        - "Yes – the library already supports this"
+        - "Possibly – I'm not sure"
+        - "No – would require library changes too"
+        - "Not applicable"
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Any links, references, or screenshots.
