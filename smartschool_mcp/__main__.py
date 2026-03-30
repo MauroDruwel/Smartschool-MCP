@@ -113,11 +113,15 @@ class _BearerAuthMiddleware:
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] == "http":
+            # Let CORS preflight through so the browser can negotiate headers.
+            if scope.get("method", "").upper() == "OPTIONS":
+                await self.app(scope, receive, send)
+                return
             headers = {k.lower(): v for k, v in scope.get("headers", [])}
-            auth = headers.get(b"authorization", b"").decode()
+            auth_bytes = headers.get(b"authorization", b"")
             if not (
-                auth.startswith("Bearer ")
-                and hmac.compare_digest(auth[7:].encode(), self.token)
+                auth_bytes.startswith(b"Bearer ")
+                and hmac.compare_digest(auth_bytes[7:], self.token)
             ):
                 await self._reject(send)
                 return
