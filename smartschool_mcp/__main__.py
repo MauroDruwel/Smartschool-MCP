@@ -50,7 +50,7 @@ def main() -> None:
     parser.add_argument(
         "--port",
         type=int,
-        default=int(os.environ.get("MCP_PORT", "8000")),
+        default=os.environ.get("MCP_PORT", "8000"),
         help="Bind port for HTTP transport (default: 8000)",
     )
     args = parser.parse_args()
@@ -120,7 +120,7 @@ class _BearerAuthMiddleware:
             headers = {k.lower(): v for k, v in scope.get("headers", [])}
             auth_bytes = headers.get(b"authorization", b"")
             if not (
-                auth_bytes.startswith(b"Bearer ")
+                auth_bytes[:7].lower() == b"bearer "
                 and hmac.compare_digest(auth_bytes[7:], self.token)
             ):
                 await self._reject(send)
