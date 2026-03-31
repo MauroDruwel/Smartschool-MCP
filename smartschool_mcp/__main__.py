@@ -10,17 +10,65 @@ Environment variables (all overridable by CLI flags):
   MCP_TRANSPORT   stdio | streamable-http  (default: stdio)
   MCP_HOST        bind address for HTTP    (default: 0.0.0.0)
   MCP_PORT        port for HTTP            (default: 8000)
-  MCP_API_KEY     optional Bearer token required on every HTTP request
+  MCP_API_KEY     optional Bearer token (single-user mode only)
+  MCP_UNIVERSAL   set to 1 to enable universal mode
+
+Universal mode (--universal / MCP_UNIVERSAL=1):
+  One server instance serves any Smartschool user.  Pass credentials on
+  every request instead of baking them into the server environment:
+
+    URL query params:   ?school=school.smartschool.be&mfa=2000-01-15
+    Authorization header: Basic base64(username:password)
+
+  In claude.ai → Settings → Integrations, configure the integration URL
+  with the school and mfa query params, and supply your Smartschool
+  username as the client_id and password as the client_secret (these are
+  forwarded as HTTP Basic auth).  MFA is your date of birth (YYYY-MM-DD);
+  omit it if your account does not require verification.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import hmac
+import json
+import logging
 import os
+import re
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
-from smartschool_mcp.server import mcp
+from smartschool import AppCredentials
+
+from smartschool_mcp.server import _request_creds, mcp
+
+_logger = logging.getLogger(__name__)
+
+# Valid hostname: dot-separated labels of letters/digits/hyphens.
+_HOSTNAME_RE = re.compile(
+    r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$"
+)
+
+
+def _validate_school_url(raw: str) -> str | None:
+    """Normalise and validate a school URL from the query string.
+
+    Strips the scheme and trailing slashes so the caller always receives a
+    bare ``hostname`` (or ``hostname:port``) string.  Returns ``None`` if the
+    value does not look like a valid hostname, preventing attacker-controlled
+    URL injection into ``AppCredentials``.
+    """
+    # Add a scheme if missing so urlparse works correctly.
+    candidate = raw if "://" in raw else f"https://{raw}"
+    try:
+        parsed = urlparse(candidate)
+        host = parsed.hostname or ""
+    except Exception:
+        return None
+    if not host or not _HOSTNAME_RE.match(host):
+        return None
+    return host if not parsed.port else f"{host}:{parsed.port}"
 
 
 def main() -> None:
@@ -53,15 +101,24 @@ def main() -> None:
         default=os.environ.get("MCP_PORT", "8000"),
         help="Bind port for HTTP transport (default: 8000)",
     )
+    parser.add_argument(
+        "--universal",
+        action="store_true",
+        default=os.environ.get("MCP_UNIVERSAL", "").lower() in ("1", "true", "yes"),
+        help=(
+            "Universal mode: accept per-request credentials via "
+            "?school=&mfa= query params and Authorization: Basic header"
+        ),
+    )
     args = parser.parse_args()
 
     if args.transport == "streamable-http":
-        _run_http(args.host, args.port)
+        _run_http(args.host, args.port, universal=args.universal)
     else:
         mcp.run()
 
 
-def _run_http(host: str, port: int) -> None:
+def _run_http(host: str, port: int, universal: bool = False) -> None:
     """Run the MCP server over Streamable HTTP (for remote clients / claude.ai).
 
     The MCP endpoint will be available at:
@@ -81,8 +138,27 @@ def _run_http(host: str, port: int) -> None:
     # The ASGI app exposes a single endpoint at /mcp (POST + GET).
     app: Any = mcp.streamable_http_app()
 
+    if universal:
+        # Universal mode: credentials come from each request, not from env vars.
+        app = _UniversalCredentialMiddleware(app)
+        print("[smartschool-mcp] Universal mode enabled")
+        print(
+            "[smartschool-mcp] Pass ?school=<url>&mfa=<dob> in the URL "
+            "and credentials via Authorization: Basic"
+        )
+    else:
+        # Optional Bearer-token guard.  Set MCP_API_KEY to enable.
+        api_key = os.environ.get("MCP_API_KEY")
+        if api_key:
+            app = _BearerAuthMiddleware(app, api_key)
+            print(
+                "[smartschool-mcp] Bearer auth enabled - "
+                "set Authorization: Bearer <MCP_API_KEY>"
+            )
+
     # CORS is required so browser-based clients (including claude.ai) can read
     # the Mcp-Session-Id header returned during initialisation.
+    # Wrap outermost so CORS preflight OPTIONS is handled before auth.
     app = CORSMiddleware(
         app,
         allow_origins=["*"],  # tighten to specific origins in production
@@ -91,55 +167,122 @@ def _run_http(host: str, port: int) -> None:
         expose_headers=["Mcp-Session-Id"],
     )
 
-    # Optional Bearer-token guard.  Set MCP_API_KEY to enable.
-    api_key = os.environ.get("MCP_API_KEY")
-    if api_key:
-        app = _BearerAuthMiddleware(app, api_key)
-        print(
-            "[smartschool-mcp] Bearer auth enabled - "
-            "set Authorization: Bearer <MCP_API_KEY>"
-        )
-
     print(f"[smartschool-mcp] Listening on http://{host}:{port}/mcp")
     uvicorn.run(app, host=host, port=port)
+
+
+def _parse_auth_header(scope: dict) -> bytes:
+    """Extract the raw Authorization header bytes from an ASGI scope."""
+    headers: dict[bytes, bytes] = {k.lower(): v for k, v in scope.get("headers", [])}
+    return headers.get(b"authorization", b"")
+
+
+async def _send_401(send, www_authenticate: bytes, message: str) -> None:
+    """Send a JSON 401 response with the given WWW-Authenticate challenge."""
+    body = json.dumps({"error": message}).encode()
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 401,
+            "headers": [
+                [b"content-type", b"application/json"],
+                [b"www-authenticate", www_authenticate],
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": body})
+
+
+class _UniversalCredentialMiddleware:
+    """ASGI middleware for universal (multi-user) mode.
+
+    Extracts Smartschool credentials from each HTTP request so that a single
+    hosted server instance can serve any Smartschool user:
+
+    - ``school`` and ``mfa`` are read from URL query parameters.
+    - ``username`` and ``password`` are read from an ``Authorization: Basic``
+      header (standard HTTP Basic auth, base64-encoded ``username:password``).
+
+    In claude.ai, configure the integration URL with the school and mfa query
+    params, and supply your Smartschool username as the client_id and password
+    as the client_secret (forwarded as HTTP Basic auth).
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        if scope.get("method", "").upper() == "OPTIONS":
+            await self.app(scope, receive, send)
+            return
+
+        qs = parse_qs(scope.get("query_string", b"").decode())
+        raw_school = (qs.get("school") or [""])[0]
+        school = _validate_school_url(raw_school) if raw_school else None
+        mfa = (qs.get("mfa") or [""])[0]
+
+        auth_bytes = _parse_auth_header(scope)
+        username = password = None
+        if auth_bytes[:6].lower() == b"basic ":
+            try:
+                decoded = base64.b64decode(auth_bytes[6:]).decode()
+                if ":" in decoded:
+                    username, password = decoded.split(":", 1)
+            except Exception as e:
+                _logger.debug("Failed to decode Basic auth header: %s", e)
+
+        if not school or not username or not password:
+            await _send_401(
+                send,
+                b'Basic realm="Smartschool MCP"',
+                "Provide ?school=<url> in the URL and credentials "
+                "via Authorization: Basic <base64(username:password)>",
+            )
+            return
+
+        token = _request_creds.set(
+            AppCredentials(
+                username=username,
+                password=password,
+                main_url=school,
+                mfa=mfa,
+            )
+        )
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _request_creds.reset(token)
 
 
 class _BearerAuthMiddleware:
     """Minimal ASGI middleware that enforces a static Bearer token."""
 
-    def __init__(self, app, token: str) -> None:
+    def __init__(self, app: Any, token: str) -> None:
         self.app = app
         self.token = token.encode()
 
-    async def __call__(self, scope, receive, send) -> None:
-        if scope["type"] == "http":
-            # Let CORS preflight through so the browser can negotiate headers.
-            if scope.get("method", "").upper() == "OPTIONS":
-                await self.app(scope, receive, send)
-                return
-            headers = {k.lower(): v for k, v in scope.get("headers", [])}
-            auth_bytes = headers.get(b"authorization", b"")
-            if not (
-                auth_bytes[:7].lower() == b"bearer "
-                and hmac.compare_digest(auth_bytes[7:], self.token)
-            ):
-                await self._reject(send)
-                return
-        await self.app(scope, receive, send)
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-    @staticmethod
-    async def _reject(send) -> None:
-        await send(
-            {
-                "type": "http.response.start",
-                "status": 401,
-                "headers": [
-                    [b"content-type", b"application/json"],
-                    [b"www-authenticate", b'Bearer realm="Smartschool MCP"'],
-                ],
-            }
-        )
-        await send({"type": "http.response.body", "body": b'{"error":"Unauthorized"}'})
+        if scope.get("method", "").upper() == "OPTIONS":
+            await self.app(scope, receive, send)
+            return
+
+        auth_bytes = _parse_auth_header(scope)
+        if not (
+            auth_bytes[:7].lower() == b"bearer "
+            and hmac.compare_digest(auth_bytes[7:], self.token)
+        ):
+            await _send_401(send, b'Bearer realm="Smartschool MCP"', "Unauthorized")
+            return
+
+        await self.app(scope, receive, send)
 
 
 if __name__ == "__main__":
