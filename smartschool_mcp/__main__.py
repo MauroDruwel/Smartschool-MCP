@@ -127,6 +127,7 @@ def _run_http(
                 "e.g. https://mcp.example.com"
             )
 
+        from mcp.server.auth.provider import ProviderTokenVerifier
         from mcp.server.auth.settings import (
             AuthSettings,
             ClientRegistrationOptions,
@@ -138,10 +139,15 @@ def _run_http(
 
         provider = SmartschoolOAuthProvider(issuer_url=issuer_url)
 
+        # The resource URL is the public MCP endpoint that clients connect to.
+        resource_url = issuer_url.rstrip("/") + "/mcp"
+
         # Configure OAuth on the FastMCP instance before building the ASGI app.
         mcp._auth_server_provider = provider  # type: ignore[attr-defined]
+        mcp._token_verifier = ProviderTokenVerifier(provider)  # type: ignore[attr-defined,arg-type]
         mcp.settings.auth = AuthSettings(
             issuer_url=AnyHttpUrl(issuer_url),
+            resource_server_url=AnyHttpUrl(resource_url),
             client_registration_options=ClientRegistrationOptions(enabled=True),
             revocation_options=RevocationOptions(enabled=True),
         )

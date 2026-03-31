@@ -146,6 +146,7 @@ class SmartschoolOAuthProvider:
         return self._clients.get(client_id)
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
+        assert client_info.client_id is not None
         self._clients[client_info.client_id] = client_info
 
     # -- Authorization ------------------------------------------------------
@@ -157,6 +158,7 @@ class SmartschoolOAuthProvider:
     ) -> str:
         """Store pending auth params and redirect to the built-in login form."""
         pending_id = secrets.token_urlsafe(32)
+        assert client.client_id is not None
         self._pending_auths[pending_id] = _PendingAuth(
             params=params, client_id=client.client_id
         )
@@ -184,17 +186,18 @@ class SmartschoolOAuthProvider:
 
         cred_key = authorization_code.cred_key
         now = int(time.time())
+        cid = client.client_id or ""
 
         access = SmartschoolAccessToken(
             token=secrets.token_urlsafe(32),
-            client_id=client.client_id,
+            client_id=cid,
             scopes=authorization_code.scopes,
             expires_at=now + _ACCESS_TOKEN_TTL,
             cred_key=cred_key,
         )
         refresh = SmartschoolRefreshToken(
             token=secrets.token_urlsafe(32),
-            client_id=client.client_id,
+            client_id=cid,
             scopes=authorization_code.scopes,
             expires_at=now + _REFRESH_TOKEN_TTL,
             cred_key=cred_key,
@@ -245,17 +248,18 @@ class SmartschoolOAuthProvider:
 
         cred_key = refresh_token.cred_key
         now = int(time.time())
+        cid = client.client_id or ""
 
         new_access = SmartschoolAccessToken(
             token=secrets.token_urlsafe(32),
-            client_id=client.client_id,
+            client_id=cid,
             scopes=scopes or refresh_token.scopes,
             expires_at=now + _ACCESS_TOKEN_TTL,
             cred_key=cred_key,
         )
         new_refresh = SmartschoolRefreshToken(
             token=secrets.token_urlsafe(32),
-            client_id=client.client_id,
+            client_id=cid,
             scopes=scopes or refresh_token.scopes,
             expires_at=now + _REFRESH_TOKEN_TTL,
             cred_key=cred_key,
