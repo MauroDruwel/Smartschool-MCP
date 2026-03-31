@@ -38,9 +38,6 @@ _request_creds: ContextVar[AppCredentials | None] = ContextVar(
     "_request_creds", default=None
 )
 
-# Session cache keyed by (username, password, main_url, mfa) for universal mode.
-_session_cache: dict[tuple[str, str, str, str], Smartschool] = {}
-
 
 @lru_cache(maxsize=1)
 def _env_session() -> Smartschool:
@@ -51,6 +48,20 @@ def _env_session() -> Smartschool:
     crashing the process on startup.
     """
     return Smartschool(EnvCredentials())
+
+
+@lru_cache(maxsize=256)
+def _cached_app_session(
+    username: str, password: str, main_url: str, mfa: str
+) -> Smartschool:
+    """LRU-cached session per unique credential tuple (universal mode).
+
+    Bounded to 256 entries so a long-running server does not accumulate
+    unbounded Smartschool session objects.
+    """
+    return Smartschool(
+        AppCredentials(username=username, password=password, main_url=main_url, mfa=mfa)
+    )
 
 
 def _session() -> Smartschool:
@@ -64,10 +75,9 @@ def _session() -> Smartschool:
     creds = _request_creds.get()
     if creds is None:
         return _env_session()
-    key = (creds.username, creds.password, creds.main_url, creds.mfa)
-    if key not in _session_cache:
-        _session_cache[key] = Smartschool(creds)
-    return _session_cache[key]
+    return _cached_app_session(
+        creds.username, creds.password, creds.main_url, creds.mfa
+    )
 
 
 def _safe_get_teacher_names(

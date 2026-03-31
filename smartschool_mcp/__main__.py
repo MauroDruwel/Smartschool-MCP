@@ -142,6 +142,28 @@ def _run_http(host: str, port: int, universal: bool = False) -> None:
     uvicorn.run(app, host=host, port=port)
 
 
+def _parse_auth_header(scope: dict) -> bytes:
+    """Extract the raw Authorization header bytes from an ASGI scope."""
+    headers: dict[bytes, bytes] = {k.lower(): v for k, v in scope.get("headers", [])}
+    return headers.get(b"authorization", b"")
+
+
+async def _send_401(send, www_authenticate: bytes, message: str) -> None:
+    """Send a JSON 401 response with the given WWW-Authenticate challenge."""
+    body = json.dumps({"error": message}).encode()
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 401,
+            "headers": [
+                [b"content-type", b"application/json"],
+                [b"www-authenticate", www_authenticate],
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": body})
+
+
 class _UniversalCredentialMiddleware:
     """ASGI middleware for universal (multi-user) mode.
 
@@ -157,27 +179,23 @@ class _UniversalCredentialMiddleware:
     as the client_secret (forwarded as HTTP Basic auth).
     """
 
-    def __init__(self, app) -> None:
+    def __init__(self, app: Any) -> None:
         self.app = app
 
-    async def __call__(self, scope, receive, send) -> None:
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
-        # CORS preflight passes through without auth.
         if scope.get("method", "").upper() == "OPTIONS":
             await self.app(scope, receive, send)
             return
 
-        # Parse school + mfa from query string.
         qs = parse_qs(scope.get("query_string", b"").decode())
         school = (qs.get("school") or [None])[0]
         mfa = (qs.get("mfa") or [""])[0]
 
-        # Parse username + password from Basic auth header.
-        headers = {k.lower(): v for k, v in scope.get("headers", [])}
-        auth_bytes = headers.get(b"authorization", b"")
+        auth_bytes = _parse_auth_header(scope)
         username = password = None
         if auth_bytes[:6].lower() == b"basic ":
             try:
@@ -188,8 +206,9 @@ class _UniversalCredentialMiddleware:
                 pass
 
         if not school or not username or not password:
-            await self._reject(
+            await _send_401(
                 send,
+                b'Basic realm="Smartschool MCP"',
                 "Provide ?school=<url> in the URL and credentials "
                 "via Authorization: Basic <base64(username:password)>",
             )
@@ -208,58 +227,32 @@ class _UniversalCredentialMiddleware:
         finally:
             _request_creds.reset(token)
 
-    @staticmethod
-    async def _reject(send, message: str) -> None:
-        body = json.dumps({"error": message}).encode()
-        await send(
-            {
-                "type": "http.response.start",
-                "status": 401,
-                "headers": [
-                    [b"content-type", b"application/json"],
-                    [b"www-authenticate", b'Basic realm="Smartschool MCP"'],
-                ],
-            }
-        )
-        await send({"type": "http.response.body", "body": body})
-
 
 class _BearerAuthMiddleware:
     """Minimal ASGI middleware that enforces a static Bearer token."""
 
-    def __init__(self, app, token: str) -> None:
+    def __init__(self, app: Any, token: str) -> None:
         self.app = app
         self.token = token.encode()
 
-    async def __call__(self, scope, receive, send) -> None:
-        if scope["type"] == "http":
-            # Let CORS preflight through so the browser can negotiate headers.
-            if scope.get("method", "").upper() == "OPTIONS":
-                await self.app(scope, receive, send)
-                return
-            headers = {k.lower(): v for k, v in scope.get("headers", [])}
-            auth_bytes = headers.get(b"authorization", b"")
-            if not (
-                auth_bytes[:7].lower() == b"bearer "
-                and hmac.compare_digest(auth_bytes[7:], self.token)
-            ):
-                await self._reject(send)
-                return
-        await self.app(scope, receive, send)
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-    @staticmethod
-    async def _reject(send) -> None:
-        await send(
-            {
-                "type": "http.response.start",
-                "status": 401,
-                "headers": [
-                    [b"content-type", b"application/json"],
-                    [b"www-authenticate", b'Bearer realm="Smartschool MCP"'],
-                ],
-            }
-        )
-        await send({"type": "http.response.body", "body": b'{"error":"Unauthorized"}'})
+        if scope.get("method", "").upper() == "OPTIONS":
+            await self.app(scope, receive, send)
+            return
+
+        auth_bytes = _parse_auth_header(scope)
+        if not (
+            auth_bytes[:7].lower() == b"bearer "
+            and hmac.compare_digest(auth_bytes[7:], self.token)
+        ):
+            await _send_401(send, b'Bearer realm="Smartschool MCP"', "Unauthorized")
+            return
+
+        await self.app(scope, receive, send)
 
 
 if __name__ == "__main__":
