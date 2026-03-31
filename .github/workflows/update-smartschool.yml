@@ -1,0 +1,51 @@
+name: Update dependencies
+
+on:
+  schedule:
+    # Every Monday at 08:00 UTC
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    name: Update uv.lock dependencies
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Upgrade all lockfile dependencies
+        run: uv lock --upgrade
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet uv.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open pull request
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore: update dependencies"
+          branch: deps/auto-update
+          delete-branch: true
+          title: "chore(deps): update dependencies"
+          body: |
+            Automated weekly update of all dependencies in `uv.lock`.
+
+            Review the lockfile diff to see upgraded package versions.
+
+            > Opened automatically by the *Update dependencies* workflow.
+          labels: dependencies
