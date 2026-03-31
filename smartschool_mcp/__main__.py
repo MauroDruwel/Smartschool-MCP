@@ -127,12 +127,15 @@ def _run_http(
                 "e.g. https://mcp.example.com"
             )
 
+        from urllib.parse import urlparse
+
         from mcp.server.auth.provider import ProviderTokenVerifier
         from mcp.server.auth.settings import (
             AuthSettings,
             ClientRegistrationOptions,
             RevocationOptions,
         )
+        from mcp.server.transport_security import TransportSecuritySettings
         from pydantic import AnyHttpUrl
 
         from smartschool_mcp.auth import SmartschoolOAuthProvider, login_routes
@@ -152,6 +155,15 @@ def _run_http(
             revocation_options=RevocationOptions(enabled=True),
         )
         mcp._custom_starlette_routes.extend(login_routes(provider))  # type: ignore[attr-defined]
+
+        # Allow the public hostname in addition to loopback addresses so that
+        # requests forwarded by the reverse proxy (with Host: <public-domain>)
+        # pass DNS-rebinding protection instead of getting 421.
+        public_host = urlparse(issuer_url).netloc
+        mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*", public_host],
+        )
 
         print("[smartschool-mcp] Universal mode enabled (OAuth 2.1)")
         print(f"[smartschool-mcp] Issuer URL: {issuer_url}")
