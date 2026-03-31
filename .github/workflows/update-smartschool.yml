@@ -1,0 +1,60 @@
+name: Update smartschool dependency
+
+on:
+  schedule:
+    # Every Monday at 08:00 UTC, same cadence as Dependabot
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    name: Bump smartschool to latest HEAD
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Upgrade smartschool lock entry
+        run: uv lock --upgrade-package smartschool
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet uv.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            OLD=$(git show HEAD:uv.lock | grep -A1 'name = "smartschool"' | grep "rev =" | grep -o '[0-9a-f]\{7,\}' | head -1)
+            NEW=$(grep -A1 'name = "smartschool"' uv.lock | grep "rev =" | grep -o '[0-9a-f]\{7,\}' | head -1)
+            echo "old_rev=${OLD}" >> "$GITHUB_OUTPUT"
+            echo "new_rev=${NEW}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open pull request
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore: bump smartschool to ${{ steps.diff.outputs.new_rev }}"
+          branch: deps/smartschool-auto-update
+          delete-branch: true
+          title: "chore(deps): bump smartschool ${{ steps.diff.outputs.old_rev }} → ${{ steps.diff.outputs.new_rev }}"
+          body: |
+            Automated weekly update of the `smartschool` git dependency.
+
+            | | Commit |
+            |---|---|
+            | **Before** | `${{ steps.diff.outputs.old_rev }}` |
+            | **After** | `${{ steps.diff.outputs.new_rev }}` |
+
+            [Compare changes](https://github.com/svaningelgem/smartschool/compare/${{ steps.diff.outputs.old_rev }}...${{ steps.diff.outputs.new_rev }})
+
+            > Opened automatically by the *Update smartschool dependency* workflow.
+          labels: dependencies
