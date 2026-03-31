@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 import threading
-from contextvars import ContextVar
 from datetime import date, timedelta
 from functools import lru_cache
 from typing import Any, TypedDict
@@ -35,11 +34,6 @@ from smartschool import (
 
 # MCP server - tools are registered via @mcp.tool() decorators below
 mcp = FastMCP("Smartschool MCP")
-
-# Per-request credentials, set by _UniversalCredentialMiddleware in universal mode.
-_request_creds: ContextVar[AppCredentials | None] = ContextVar(
-    "_request_creds", default=None
-)
 
 
 @lru_cache(maxsize=1)
@@ -82,17 +76,28 @@ def _cached_app_session(
 def _session() -> Smartschool:
     """Return the active Smartschool session.
 
-    In universal mode a per-request AppCredentials object is stored in
-    _request_creds; sessions are cached per unique credentials tuple so that
-    repeated calls reuse the same authenticated session (and its cookie cache).
+    In universal mode (OAuth), the access token carries a ``cred_key`` that
+    maps to stored Smartschool credentials.  Sessions are cached per unique
+    credential tuple so repeated calls reuse the same authenticated session.
     Falls back to the environment-variable session in single-user / stdio mode.
     """
-    creds = _request_creds.get()
-    if creds is None:
-        return _env_session()
-    return _cached_app_session(
-        creds.username, creds.password, creds.main_url, creds.mfa
-    )
+    # Check OAuth context (universal mode via OAuth 2.1)
+    try:
+        from mcp.server.auth.middleware.auth_context import get_access_token
+
+        from smartschool_mcp.auth import get_credentials
+
+        access_token = get_access_token()
+        if access_token is not None and hasattr(access_token, "cred_key"):
+            creds = get_credentials(access_token.cred_key)  # type: ignore[attr-defined]
+            if creds is not None:
+                return _cached_app_session(
+                    creds.username, creds.password, creds.main_url, creds.mfa
+                )
+    except ImportError:
+        pass
+
+    return _env_session()
 
 
 def _safe_get_teacher_names(
