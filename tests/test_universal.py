@@ -89,6 +89,17 @@ async def test_malformed_basic_auth_returns_401() -> None:
 
 
 @pytest.mark.asyncio
+async def test_invalid_base64_auth_returns_401() -> None:
+    scope = _make_scope(
+        query_string=_qs("school.smartschool.be"),
+        headers=[(b"authorization", b"Basic !!!")],
+    )
+    messages = await _run(scope)
+    start = next(m for m in messages if m.get("type") == "http.response.start")
+    assert start["status"] == 401
+
+
+@pytest.mark.asyncio
 async def test_401_body_contains_error_key() -> None:
     scope = _make_scope()
     messages = await _run(scope)
