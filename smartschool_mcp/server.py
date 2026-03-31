@@ -36,6 +36,10 @@ from smartschool import (
 mcp = FastMCP("Smartschool MCP")
 
 
+class AuthenticationError(RuntimeError):
+    """Authentication state is present but credentials are no longer valid."""
+
+
 @lru_cache(maxsize=1)
 def _env_session() -> Smartschool:
     """Cached session using environment-variable credentials (single-user mode).
@@ -68,8 +72,19 @@ def _cached_app_session(
     from server-side session expiry are automatically replaced.  Bounded to
     256 entries to cap memory use.
     """
+    from smartschool_mcp.auth import _validate_school_url
+
+    validated_host = _validate_school_url(main_url)
+    if not validated_host:
+        raise ValueError("Untrusted or invalid Smartschool host")
+
     return Smartschool(
-        AppCredentials(username=username, password=password, main_url=main_url, mfa=mfa)
+        AppCredentials(
+            username=username,
+            password=password,
+            main_url=validated_host,
+            mfa=mfa,
+        )
     )
 
 
@@ -90,10 +105,13 @@ def _session() -> Smartschool:
         access_token = get_access_token()
         if access_token is not None and hasattr(access_token, "cred_key"):
             creds = get_credentials(access_token.cred_key)  # type: ignore[attr-defined]
-            if creds is not None:
-                return _cached_app_session(
-                    creds.username, creds.password, creds.main_url, creds.mfa
+            if creds is None:
+                raise AuthenticationError(
+                    "OAuth credentials expired; re-authentication required"
                 )
+            return _cached_app_session(
+                creds.username, creds.password, creds.main_url, creds.mfa
+            )
     except ImportError:
         pass
 

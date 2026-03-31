@@ -3,20 +3,27 @@
 from __future__ import annotations
 
 import time
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from mcp.server.auth.provider import AuthorizationParams
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl
 from smartschool import AppCredentials
+from starlette.responses import Response
 
 from smartschool_mcp.auth import (
     SmartschoolAccessToken,
     SmartschoolOAuthProvider,
     SmartschoolRefreshToken,
     _credential_store,
+    _handle_login_get,
+    _handle_login_post,
+    _render_login_form,
     _validate_school_url,
     get_credentials,
+    login_routes,
 )
 
 # ---------------------------------------------------------------------------
@@ -75,6 +82,27 @@ class TestValidateSchoolUrl:
 
     def test_single_label(self) -> None:
         assert _validate_school_url("localhost") is None
+
+    def test_urlparse_exception_returns_none(self) -> None:
+        with patch("smartschool_mcp.auth.urlparse", side_effect=ValueError("boom")):
+            assert _validate_school_url("https://school.smartschool.be") is None
+
+    def test_untrusted_suffix_rejected(self) -> None:
+        with (
+            patch("smartschool_mcp.auth._ALLOWED_HOSTS", set()),
+            patch("smartschool_mcp.auth._ALLOWED_SUFFIXES", {".smartschool.be"}),
+        ):
+            assert _validate_school_url("school.example.com") is None
+
+    def test_allowlisted_registered_domain_is_accepted(self) -> None:
+        with (
+            patch("smartschool_mcp.auth._ALLOWED_HOSTS", {"example.edu"}),
+            patch("smartschool_mcp.auth._ALLOWED_SUFFIXES", set()),
+        ):
+            assert (
+                _validate_school_url("school.subdomain.example.edu")
+                == "school.subdomain.example.edu"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +251,23 @@ class TestAuthorizationCodeExchange:
         loaded = await provider.load_authorization_code(client, auth_code.code)
         assert loaded is None
 
+    @pytest.mark.asyncio
+    async def test_exchange_reused_code_raises_value_error(self) -> None:
+        provider = _make_provider()
+        client = _make_client()
+        params = _make_auth_params()
+
+        url = await provider.authorize(client, params)
+        pending_id = url.split("pending=")[1]
+        auth_code = provider.complete_authorization(
+            pending_id=pending_id,
+            cred_key="test-cred-key",
+        )
+
+        await provider.exchange_authorization_code(client, auth_code)
+        with pytest.raises(ValueError, match="already used"):
+            await provider.exchange_authorization_code(client, auth_code)
+
 
 # ---------------------------------------------------------------------------
 # Access tokens
@@ -296,18 +341,27 @@ class TestRefreshTokens:
         assert rt is not None
         assert isinstance(rt, SmartschoolRefreshToken)
 
-        new_token = await provider.exchange_refresh_token(client, rt, ["read"])
-        assert new_token.access_token != original.access_token
-        assert new_token.refresh_token != original.refresh_token
+        _credential_store["test-cred-key"] = AppCredentials(
+            username="user",
+            password="pass",
+            main_url="school.smartschool.be",
+            mfa="",
+        )
+        try:
+            new_token = await provider.exchange_refresh_token(client, rt, ["read"])
+            assert new_token.access_token != original.access_token
+            assert new_token.refresh_token != original.refresh_token
 
-        # Old refresh token should be gone
-        old_rt = await provider.load_refresh_token(client, original.refresh_token)
-        assert old_rt is None
+            # Old refresh token should be gone
+            old_rt = await provider.load_refresh_token(client, original.refresh_token)
+            assert old_rt is None
 
-        # New tokens carry the same cred_key
-        new_access = await provider.load_access_token(new_token.access_token)
-        assert new_access is not None
-        assert new_access.cred_key == "test-cred-key"
+            # New tokens carry the same cred_key
+            new_access = await provider.load_access_token(new_token.access_token)
+            assert new_access is not None
+            assert new_access.cred_key == "test-cred-key"
+        finally:
+            _credential_store.pop("test-cred-key", None)
 
     @pytest.mark.asyncio
     async def test_load_refresh_token_wrong_client(self) -> None:
@@ -326,6 +380,21 @@ class TestRefreshTokens:
 
         rt = await provider.load_refresh_token(other, token.refresh_token)
         assert rt is None
+
+    @pytest.mark.asyncio
+    async def test_refresh_exchange_without_credentials_raises(self) -> None:
+        provider = _make_provider()
+        client = _make_client()
+        token = SmartschoolRefreshToken(
+            token="rt-1",
+            client_id="test-client",
+            scopes=["read"],
+            expires_at=int(time.time()) + 600,
+            cred_key="missing-key",
+        )
+        provider._refresh_tokens[token.token] = token
+        with pytest.raises(ValueError, match="credentials expired"):
+            await provider.exchange_refresh_token(client, token, ["read"])
 
 
 # ---------------------------------------------------------------------------
@@ -395,3 +464,218 @@ class TestCredentialStore:
 
     def test_get_credentials_missing(self) -> None:
         assert get_credentials("nonexistent") is None
+
+
+# ---------------------------------------------------------------------------
+# Login form and route handlers
+# ---------------------------------------------------------------------------
+
+
+class TestLoginHandlers:
+    def test_render_login_form_includes_error_and_values(self) -> None:
+        response = _render_login_form(
+            "pending-123",
+            error="Bad credentials",
+            school="school.smartschool.be",
+            username="john",
+            mfa="2000-01-01",
+        )
+        body = response.body.decode()
+        assert response.status_code == 200
+        assert "Bad credentials" in body
+        assert 'name="pending" value="pending-123"' in body
+        assert 'value="school.smartschool.be"' in body
+        assert 'value="john"' in body
+        assert 'value="2000-01-01"' in body
+
+    def test_render_login_form_escapes_user_values(self) -> None:
+        response = _render_login_form(
+            '<pending">',
+            error="<b>bad</b>",
+            school='"><script>alert(1)</script>',
+            username='"><img src=x onerror=alert(1)>',
+            mfa="<svg/onload=alert(1)>",
+        )
+        body = response.body.decode()
+        assert "<script>alert(1)</script>" not in body
+        assert "<img src=x onerror=alert(1)>" not in body
+        assert "<pending>" not in body
+        assert "&lt;b&gt;bad&lt;/b&gt;" in body
+        assert 'name="pending" value="' in body
+
+    @pytest.mark.asyncio
+    async def test_login_routes_dispatches_get(self) -> None:
+        provider = MagicMock()
+        route = login_routes(provider)[0]
+        request = MagicMock()
+        request.method = "GET"
+
+        with (
+            patch(
+                "smartschool_mcp.auth._handle_login_get",
+                new=AsyncMock(return_value=Response("ok")),
+            ) as get_mock,
+            patch(
+                "smartschool_mcp.auth._handle_login_post",
+                new=AsyncMock(return_value=Response("nope")),
+            ) as post_mock,
+        ):
+            await route.endpoint(request)
+
+        get_mock.assert_awaited_once_with(request, provider)
+        post_mock.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_login_routes_dispatches_post(self) -> None:
+        provider = MagicMock()
+        route = login_routes(provider)[0]
+        request = MagicMock()
+        request.method = "POST"
+
+        with (
+            patch(
+                "smartschool_mcp.auth._handle_login_get",
+                new=AsyncMock(return_value=Response("nope")),
+            ) as get_mock,
+            patch(
+                "smartschool_mcp.auth._handle_login_post",
+                new=AsyncMock(return_value=Response("ok")),
+            ) as post_mock,
+        ):
+            await route.endpoint(request)
+
+        post_mock.assert_awaited_once_with(request, provider)
+        get_mock.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_handle_login_get_invalid_pending_returns_400(self) -> None:
+        provider = MagicMock()
+        provider.get_pending_auth.return_value = None
+        request = MagicMock()
+        request.query_params = {"pending": "missing"}
+
+        response = await _handle_login_get(request, provider)
+        assert response.status_code == 400
+        assert "Invalid or expired login link" in response.body.decode()
+
+    @pytest.mark.asyncio
+    async def test_handle_login_get_valid_pending_returns_form(self) -> None:
+        provider = MagicMock()
+        provider.get_pending_auth.return_value = object()
+        request = MagicMock()
+        request.query_params = {"pending": "abc123"}
+
+        response = await _handle_login_get(request, provider)
+        assert response.status_code == 200
+        assert 'name="pending" value="abc123"' in response.body.decode()
+
+    @pytest.mark.asyncio
+    async def test_handle_login_post_expired_pending_returns_400(self) -> None:
+        provider = MagicMock()
+        provider.get_pending_auth.return_value = None
+        request = MagicMock()
+        request.form = AsyncMock(
+            return_value={
+                "pending": "expired",
+                "school": "school.smartschool.be",
+                "username": "john",
+                "password": "secret",
+                "mfa": "",
+            }
+        )
+
+        response = await _handle_login_post(request, provider)
+        assert response.status_code == 400
+        assert "Login session expired" in response.body.decode()
+
+    @pytest.mark.asyncio
+    async def test_handle_login_post_invalid_school_rerenders_form(self) -> None:
+        provider = MagicMock()
+        provider.get_pending_auth.return_value = object()
+        request = MagicMock()
+        request.form = AsyncMock(
+            return_value={
+                "pending": "abc",
+                "school": "not valid!",
+                "username": "john",
+                "password": "secret",
+                "mfa": "",
+            }
+        )
+
+        response = await _handle_login_post(request, provider)
+        body = response.body.decode()
+        assert response.status_code == 200
+        assert "Invalid school URL." in body
+        assert 'value="not valid!"' in body
+
+    @pytest.mark.asyncio
+    async def test_handle_login_post_requires_username_and_password(self) -> None:
+        provider = MagicMock()
+        provider.get_pending_auth.return_value = object()
+        request = MagicMock()
+        request.form = AsyncMock(
+            return_value={
+                "pending": "abc",
+                "school": "school.smartschool.be",
+                "username": "",
+                "password": "",
+                "mfa": "",
+            }
+        )
+
+        response = await _handle_login_post(request, provider)
+        assert response.status_code == 200
+        assert "Username and password are required." in response.body.decode()
+
+    @pytest.mark.asyncio
+    async def test_handle_login_post_failed_smartschool_login(self) -> None:
+        provider = MagicMock()
+        provider.get_pending_auth.return_value = object()
+        request = MagicMock()
+        request.form = AsyncMock(
+            return_value={
+                "pending": "abc",
+                "school": "school.smartschool.be",
+                "username": "john",
+                "password": "wrong",
+                "mfa": "",
+            }
+        )
+
+        with patch("smartschool_mcp.auth.Smartschool", side_effect=RuntimeError("bad")):
+            response = await _handle_login_post(request, provider)
+
+        assert response.status_code == 200
+        assert "Login failed" in response.body.decode()
+
+    @pytest.mark.asyncio
+    async def test_handle_login_post_success_redirects(self) -> None:
+        provider = MagicMock()
+        params = SimpleNamespace(
+            redirect_uri=AnyUrl("http://localhost:3000/callback"),
+            state="state123",
+        )
+        provider.get_pending_auth.return_value = SimpleNamespace(params=params)
+        provider.complete_authorization.return_value = SimpleNamespace(code="code-123")
+
+        request = MagicMock()
+        request.form = AsyncMock(
+            return_value={
+                "pending": "abc",
+                "school": "school.smartschool.be",
+                "username": "john",
+                "password": "secret",
+                "mfa": "2000-01-01",
+            }
+        )
+
+        mock_session = MagicMock()
+        mock_session.get.return_value = object()
+
+        with patch("smartschool_mcp.auth.Smartschool", return_value=mock_session):
+            response = await _handle_login_post(request, provider)
+
+        assert response.status_code == 302
+        assert "code=code-123" in response.headers["location"]
+        assert "state=state123" in response.headers["location"]

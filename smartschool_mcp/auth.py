@@ -11,7 +11,9 @@ store (Redis, DB, …).
 
 from __future__ import annotations
 
+import html
 import logging
+import os
 import re
 import secrets
 import time
@@ -43,6 +45,47 @@ _HOSTNAME_RE = re.compile(
 )
 
 
+def _parse_csv_env(name: str) -> set[str]:
+    return {
+        entry.strip().lower()
+        for entry in os.environ.get(name, "").split(",")
+        if entry.strip()
+    }
+
+
+_ALLOWED_HOSTS = _parse_csv_env("SMARTSCHOOL_ALLOWED_HOSTS")
+_ALLOWED_SUFFIXES = _parse_csv_env("SMARTSCHOOL_ALLOWED_SUFFIXES") or {
+    ".smartschool.be"
+}
+
+
+def _registered_domain(host: str) -> str:
+    parts = host.lower().split(".")
+    if len(parts) < 2:
+        return host.lower()
+    return ".".join(parts[-2:])
+
+
+def _matches_suffix(host: str, suffix: str) -> bool:
+    normalized = suffix.lower().strip()
+    if not normalized:
+        return False
+    if normalized.startswith("."):
+        bare = normalized[1:]
+        return host == bare or host.endswith(normalized)
+    return host == normalized or host.endswith(f".{normalized}")
+
+
+def _is_trusted_school_host(host: str) -> bool:
+    lower_host = host.lower()
+    if _ALLOWED_HOSTS:
+        if lower_host in _ALLOWED_HOSTS:
+            return True
+        if _registered_domain(lower_host) in _ALLOWED_HOSTS:
+            return True
+    return any(_matches_suffix(lower_host, suffix) for suffix in _ALLOWED_SUFFIXES)
+
+
 def _validate_school_url(raw: str) -> str | None:
     """Normalise and validate a school URL.
 
@@ -56,6 +99,8 @@ def _validate_school_url(raw: str) -> str | None:
     except Exception:
         return None
     if not host or not _HOSTNAME_RE.match(host):
+        return None
+    if not _is_trusted_school_host(host):
         return None
     return host if not parsed.port else f"{host}:{parsed.port}"
 
@@ -181,24 +226,26 @@ class SmartschoolOAuthProvider:
         client: OAuthClientInformationFull,
         authorization_code: SmartschoolAuthCode,
     ) -> OAuthToken:
-        # Remove the used code (one-time use)
-        self._auth_codes.pop(authorization_code.code, None)
+        # Atomically consume the one-time code.
+        code_obj = self._auth_codes.pop(authorization_code.code, None)
+        if code_obj is None or code_obj.client_id != client.client_id:
+            raise ValueError("Invalid or already used authorization code")
 
-        cred_key = authorization_code.cred_key
+        cred_key = code_obj.cred_key
         now = int(time.time())
         cid = client.client_id or ""
 
         access = SmartschoolAccessToken(
             token=secrets.token_urlsafe(32),
             client_id=cid,
-            scopes=authorization_code.scopes,
+            scopes=code_obj.scopes,
             expires_at=now + _ACCESS_TOKEN_TTL,
             cred_key=cred_key,
         )
         refresh = SmartschoolRefreshToken(
             token=secrets.token_urlsafe(32),
             client_id=cid,
-            scopes=authorization_code.scopes,
+            scopes=code_obj.scopes,
             expires_at=now + _REFRESH_TOKEN_TTL,
             cred_key=cred_key,
         )
@@ -243,24 +290,32 @@ class SmartschoolOAuthProvider:
         refresh_token: SmartschoolRefreshToken,
         scopes: list[str],
     ) -> OAuthToken:
-        # Rotate: remove old tokens
-        self._refresh_tokens.pop(refresh_token.token, None)
+        # Atomically consume the old refresh token.
+        old_refresh = self._refresh_tokens.pop(refresh_token.token, None)
+        if old_refresh is None or old_refresh.client_id != client.client_id:
+            raise ValueError("Invalid or already used refresh token")
 
-        cred_key = refresh_token.cred_key
+        cred_key = old_refresh.cred_key
+        creds = _credential_store.get(cred_key)
+        if creds is None:
+            raise ValueError(
+                "Refresh token credentials expired; re-authentication required"
+            )
+        _credential_store[cred_key] = creds
         now = int(time.time())
         cid = client.client_id or ""
 
         new_access = SmartschoolAccessToken(
             token=secrets.token_urlsafe(32),
             client_id=cid,
-            scopes=scopes or refresh_token.scopes,
+            scopes=scopes or old_refresh.scopes,
             expires_at=now + _ACCESS_TOKEN_TTL,
             cred_key=cred_key,
         )
         new_refresh = SmartschoolRefreshToken(
             token=secrets.token_urlsafe(32),
             client_id=cid,
-            scopes=scopes or refresh_token.scopes,
+            scopes=scopes or old_refresh.scopes,
             expires_at=now + _REFRESH_TOKEN_TTL,
             cred_key=cred_key,
         )
@@ -403,15 +458,20 @@ def _render_login_form(
     username: str = "",
     mfa: str = "",
 ) -> HTMLResponse:
-    error_html = f'<div class="error">{error}</div>' if error else ""
-    html = (
+    escaped_error = html.escape(error) if error else ""
+    escaped_pending = html.escape(pending_id)
+    escaped_school = html.escape(school or "")
+    escaped_username = html.escape(username or "")
+    escaped_mfa = html.escape(mfa or "")
+    error_html = f'<div class="error">{escaped_error}</div>' if escaped_error else ""
+    rendered_html = (
         _LOGIN_FORM_HTML.replace("{error_html}", error_html)
-        .replace("{pending_id}", pending_id)
-        .replace("{school_value}", school)
-        .replace("{username_value}", username)
-        .replace("{mfa_value}", mfa)
+        .replace("{pending_id}", escaped_pending)
+        .replace("{school_value}", escaped_school)
+        .replace("{username_value}", escaped_username)
+        .replace("{mfa_value}", escaped_mfa)
     )
-    return HTMLResponse(html)
+    return HTMLResponse(rendered_html)
 
 
 # ---------------------------------------------------------------------------
