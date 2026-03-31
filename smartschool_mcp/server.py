@@ -6,11 +6,14 @@ messages and more.
 
 from __future__ import annotations
 
+import os
+import threading
 from contextvars import ContextVar
 from datetime import date, timedelta
 from functools import lru_cache
 from typing import Any, TypedDict
 
+from cachetools import TTLCache, cached
 from mcp.server.fastmcp import FastMCP
 from smartschool import (
     AppCredentials,
@@ -50,14 +53,26 @@ def _env_session() -> Smartschool:
     return Smartschool(EnvCredentials())
 
 
-@lru_cache(maxsize=256)
+# How long (seconds) a cached Smartschool session is reused before the next
+# request for those credentials creates a fresh one.  Cookie-based sessions
+# expire server-side; keeping this below the server's idle-session timeout
+# prevents stale-cookie failures.  Override with SESSION_TTL_SECONDS env var.
+_SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "3600"))
+_session_cache: TTLCache[tuple[str, str, str, str], Smartschool] = TTLCache(
+    maxsize=256, ttl=_SESSION_TTL_SECONDS
+)
+_session_cache_lock = threading.Lock()
+
+
+@cached(cache=_session_cache, lock=_session_cache_lock)
 def _cached_app_session(
     username: str, password: str, main_url: str, mfa: str
 ) -> Smartschool:
-    """LRU-cached session per unique credential tuple (universal mode).
+    """TTL-cached session per unique credential tuple (universal mode).
 
-    Bounded to 256 entries so a long-running server does not accumulate
-    unbounded Smartschool session objects.
+    Entries expire after SESSION_TTL_SECONDS (default 3600) so stale cookies
+    from server-side session expiry are automatically replaced.  Bounded to
+    256 entries to cap memory use.
     """
     return Smartschool(
         AppCredentials(username=username, password=password, main_url=main_url, mfa=mfa)

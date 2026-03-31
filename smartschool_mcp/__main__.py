@@ -33,6 +33,7 @@ import argparse
 import base64
 import hmac
 import json
+import logging
 import os
 from typing import Any
 from urllib.parse import parse_qs
@@ -40,6 +41,8 @@ from urllib.parse import parse_qs
 from smartschool import AppCredentials
 
 from smartschool_mcp.server import _request_creds, mcp
+
+_logger = logging.getLogger(__name__)
 
 
 def main() -> None:
@@ -202,8 +205,8 @@ class _UniversalCredentialMiddleware:
                 decoded = base64.b64decode(auth_bytes[6:]).decode()
                 if ":" in decoded:
                     username, password = decoded.split(":", 1)
-            except Exception:
-                pass
+            except Exception as e:
+                _logger.debug("Failed to decode Basic auth header: %s", e)
 
         if not school or not username or not password:
             await _send_401(
