@@ -121,7 +121,7 @@ Claude.ai requires HTTPS. Some options:
 | `MCP_HOST` | `--host` | `0.0.0.0` | Bind address (HTTP only) |
 | `MCP_PORT` | `--port` | `8000` | Port (HTTP only) |
 | `MCP_API_KEY` | — | — | Static Bearer token (single-user mode) |
-| `MCP_UNIVERSAL` | `--universal` | off | Enable universal mode |
+| `MCP_UNIVERSAL` | `--universal` | off | Enable universal mode (set to `1`, `true`, or `yes`) |
 | `SESSION_TTL_SECONDS` | — | `3600` | How long to cache sessions (universal mode) |
 | `SMARTSCHOOL_USERNAME` | — | — | Your Smartschool username |
 | `SMARTSCHOOL_PASSWORD` | — | — | Your Smartschool password |
