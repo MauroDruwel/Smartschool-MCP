@@ -1,4 +1,4 @@
-"""Tests for _UniversalCredentialMiddleware."""
+"""Tests for _UniversalCredentialMiddleware and helpers."""
 
 from __future__ import annotations
 
@@ -8,7 +8,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from smartschool_mcp.__main__ import _UniversalCredentialMiddleware
+from smartschool_mcp.__main__ import (
+    _UniversalCredentialMiddleware,
+    _validate_school_url,
+)
 from smartschool_mcp.server import _request_creds
 
 
@@ -179,3 +182,49 @@ async def test_request_creds_cleared_after_request() -> None:
     mw = _UniversalCredentialMiddleware(AsyncMock())
     await mw(scope, AsyncMock(), AsyncMock())
     assert _request_creds.get() is None
+
+
+# ── _validate_school_url ──────────────────────────────────────────────────────
+
+
+def test_validate_school_url_bare_hostname() -> None:
+    assert _validate_school_url("school.smartschool.be") == "school.smartschool.be"
+
+
+def test_validate_school_url_strips_scheme() -> None:
+    result = _validate_school_url("https://school.smartschool.be")
+    assert result == "school.smartschool.be"
+
+
+def test_validate_school_url_strips_trailing_slash() -> None:
+    result = _validate_school_url("https://school.smartschool.be/")
+    assert result == "school.smartschool.be"
+
+
+def test_validate_school_url_preserves_port() -> None:
+    result = _validate_school_url("school.smartschool.be:8443")
+    assert result == "school.smartschool.be:8443"
+
+
+def test_validate_school_url_rejects_ip_address() -> None:
+    assert _validate_school_url("192.168.1.1") is None
+
+
+def test_validate_school_url_rejects_empty() -> None:
+    assert _validate_school_url("") is None
+
+
+def test_validate_school_url_strips_path_safely() -> None:
+    # urlparse isolates the hostname; the path is discarded, not forwarded.
+    assert _validate_school_url("evil.com/../../etc/passwd") == "evil.com"
+
+
+@pytest.mark.asyncio
+async def test_invalid_school_url_returns_401() -> None:
+    scope = _make_scope(
+        query_string=b"school=not-a-valid..hostname",
+        headers=_basic("user", "pass"),
+    )
+    messages = await _run(scope)
+    start = next(m for m in messages if m.get("type") == "http.response.start")
+    assert start["status"] == 401

@@ -35,14 +35,40 @@ import hmac
 import json
 import logging
 import os
+import re
 from typing import Any
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse
 
 from smartschool import AppCredentials
 
 from smartschool_mcp.server import _request_creds, mcp
 
 _logger = logging.getLogger(__name__)
+
+# Valid hostname: dot-separated labels of letters/digits/hyphens.
+_HOSTNAME_RE = re.compile(
+    r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$"
+)
+
+
+def _validate_school_url(raw: str) -> str | None:
+    """Normalise and validate a school URL from the query string.
+
+    Strips the scheme and trailing slashes so the caller always receives a
+    bare ``hostname`` (or ``hostname:port``) string.  Returns ``None`` if the
+    value does not look like a valid hostname, preventing attacker-controlled
+    URL injection into ``AppCredentials``.
+    """
+    # Add a scheme if missing so urlparse works correctly.
+    candidate = raw if "://" in raw else f"https://{raw}"
+    try:
+        parsed = urlparse(candidate)
+        host = parsed.hostname or ""
+    except Exception:
+        return None
+    if not host or not _HOSTNAME_RE.match(host):
+        return None
+    return host if not parsed.port else f"{host}:{parsed.port}"
 
 
 def main() -> None:
@@ -195,7 +221,8 @@ class _UniversalCredentialMiddleware:
             return
 
         qs = parse_qs(scope.get("query_string", b"").decode())
-        school = (qs.get("school") or [None])[0]
+        raw_school = (qs.get("school") or [""])[0]
+        school = _validate_school_url(raw_school) if raw_school else None
         mfa = (qs.get("mfa") or [""])[0]
 
         auth_bytes = _parse_auth_header(scope)
