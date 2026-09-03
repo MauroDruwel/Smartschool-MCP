@@ -759,3 +759,146 @@ def download_attachment(
 
     except Exception as e:
         return {"error": f"Failed to download attachment: {e!s}"}
+
+
+def _parse_html(response: Any) -> Any:
+    """Parse an HTML response into a BeautifulSoup tree.
+
+    ``smartschool.bs4_html`` is not exported by every release, so fall back to
+    BeautifulSoup directly rather than failing at import time.
+    """
+    try:
+        from smartschool import bs4_html
+    except ImportError:
+        from bs4 import BeautifulSoup
+
+        return BeautifulSoup(response.text, "html.parser")
+    return bs4_html(response)
+
+
+def _absolutise(session: Smartschool, url: str) -> str:
+    """Turn a site-relative asset path into an absolute URL."""
+    if not url or url.startswith(("http://", "https://", "data:")):
+        return url
+    return session.create_url(url) if url.startswith("/") else url
+
+
+@mcp.tool()
+def get_homepage_blocks(include_html: bool = False) -> dict[str, Any]:
+    """
+    Retrieve the "in de kijker" blocks pinned to the Smartschool homepage.
+
+    Schools use these blocks for recurring content that is never sent as a
+    message and never lands in a document module — a monthly lunch menu
+    ("Maandmenu"), a monthly calendar ("Maandkalender"), announcements. The
+    content is frequently an embedded image rather than text, so ``images``
+    is usually where the information actually lives.
+
+    Args:
+        include_html: Also return each block's raw inner HTML (default: False).
+
+    Returns:
+        Dictionary with the list of blocks. Each block has a title, its
+        news_id, plain text, and absolute URLs for any embedded images and
+        links.
+
+    Examples:
+        - get_homepage_blocks() -> [{"title": "Maandmenu", "images": [...]}, ...]
+    """
+    try:
+        session = _session()
+        html = _parse_html(session.get("/"))
+
+        blocks = []
+        for block in html.select("div.homepage__block"):
+            title_el = block.select_one(".homepage__block__top__title")
+            content = block.select_one(".homepage__block__content")
+            if content is None:
+                continue
+
+            images = [
+                _absolutise(session, img["src"])
+                for img in content.select("img[src]")
+                if img.get("src")
+            ]
+            links = [
+                _absolutise(session, a["href"])
+                for a in content.select("a[href]")
+                if a.get("href")
+            ]
+
+            entry: dict[str, Any] = {
+                "title": title_el.get_text(strip=True) if title_el else None,
+                "news_id": block.get("newsid"),
+                "modname": block.get("modname"),
+                "text": " ".join(content.get_text(" ", strip=True).split()),
+                "images": images,
+                "links": links,
+            }
+            if include_html:
+                entry["html"] = content.decode_contents()
+            blocks.append(entry)
+
+        return {"blocks": blocks, "total": len(blocks)}
+
+    except Exception as e:
+        return {"error": f"Failed to retrieve homepage blocks: {e!s}"}
+
+
+@mcp.tool()
+def download_homepage_image(
+    image_url: str,
+    save_path: str | None = None,
+) -> dict[str, Any]:
+    """
+    Download an image embedded in a homepage block.
+
+    Use the URLs returned in ``get_homepage_blocks()["blocks"][*]["images"]``.
+    Only assets on the configured Smartschool host are accepted.
+
+    Args:
+        image_url: Image URL from get_homepage_blocks.
+        save_path: Optional directory to save into (default: ~/Downloads/smartschool/).
+
+    Returns:
+        Dictionary with the saved file path and bytes written.
+    """
+    from pathlib import Path
+    from urllib.parse import unquote, urlparse
+
+    try:
+        session = _session()
+        base = session.create_url("/")
+        if not image_url.startswith(base):
+            return {"error": f"Refusing to fetch a URL outside {base}"}
+
+        resp = session.get(image_url)
+        if not resp.ok:
+            return {"error": f"Failed to download image: HTTP {resp.status_code}"}
+
+        download_dir = (
+            Path(save_path) if save_path else Path.home() / "Downloads" / "smartschool"
+        )
+        download_dir.mkdir(parents=True, exist_ok=True)
+
+        # Sanitise filename to prevent path-traversal attacks
+        filename = Path(unquote(urlparse(image_url).path)).name or "homepage_image"
+        file_path = download_dir / filename
+
+        # Never overwrite — append a counter suffix
+        counter = 1
+        stem = file_path.stem
+        while file_path.exists():
+            file_path = download_dir / f"{stem} ({counter}){file_path.suffix}"
+            counter += 1
+
+        file_path.write_bytes(resp.content)
+
+        return {
+            "name": file_path.name,
+            "saved_to": str(file_path),
+            "bytes_written": len(resp.content),
+        }
+
+    except Exception as e:
+        return {"error": f"Failed to download image: {e!s}"}

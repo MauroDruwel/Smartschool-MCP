@@ -18,6 +18,8 @@ EXPECTED_TOOLS = [
     "get_reports",
     "get_planned_elements",
     "get_student_support_links",
+    "get_homepage_blocks",
+    "download_homepage_image",
 ]
 
 
@@ -314,3 +316,92 @@ def test_download_attachment_returns_error_on_exception() -> None:
     with patch("smartschool_mcp.server.Attachments", side_effect=RuntimeError("boom")):
         result = srv.download_attachment(message_id=999, file_id=42)
     assert "error" in result
+
+
+# ── Homepage blocks ───────────────────────────────────────────────────────────
+
+_HOMEPAGE_HTML = """
+<div id="centercontainer">
+  <div class="homepage__block" modname="news_in_de_kijker_84" newsid="84">
+    <div class="homepage__block__top">
+      <div class="homepage__block__top__title"><h2>Maandmenu</h2></div>
+    </div>
+    <div class="homepage__block__content">
+      <p>Menu september</p>
+      <p><img border="0" src="/public/school/Images/menu.PNG" width="891"></p>
+      <a href="https://example.org/info">meer info</a>
+    </div>
+  </div>
+  <div class="homepage__block" id="homepage__block--news">
+    <div class="homepage__block__top">
+      <div class="homepage__block__top__title"><h2>Nieuws</h2></div>
+    </div>
+    <div class="homepage__block__content"><div id="news_items"></div></div>
+  </div>
+</div>
+"""
+
+
+def _homepage_session() -> MagicMock:
+    session = MagicMock()
+    session.get.return_value = MagicMock(text=_HOMEPAGE_HTML)
+    session.create_url.side_effect = lambda path: f"https://school.smartschool.be{path}"
+    return session
+
+
+def test_get_homepage_blocks_parses_title_image_and_link() -> None:
+    with patch("smartschool_mcp.server._session", _homepage_session):
+        result = srv.get_homepage_blocks()
+
+    assert result["total"] == 2
+    menu = result["blocks"][0]
+    assert menu["title"] == "Maandmenu"
+    assert menu["news_id"] == "84"
+    assert menu["modname"] == "news_in_de_kijker_84"
+    assert menu["text"] == "Menu september meer info"
+    # site-relative image is made absolute; external link is left alone
+    assert menu["images"] == [
+        "https://school.smartschool.be/public/school/Images/menu.PNG"
+    ]
+    assert menu["links"] == ["https://example.org/info"]
+    assert "html" not in menu
+
+
+def test_get_homepage_blocks_include_html() -> None:
+    with patch("smartschool_mcp.server._session", _homepage_session):
+        result = srv.get_homepage_blocks(include_html=True)
+
+    assert "<img" in result["blocks"][0]["html"]
+
+
+def test_get_homepage_blocks_returns_error_on_exception() -> None:
+    with patch("smartschool_mcp.server._session", side_effect=RuntimeError("network")):
+        result = srv.get_homepage_blocks()
+    assert "error" in result
+    assert "network" in result["error"]
+
+
+def test_download_homepage_image_writes_file(tmp_path) -> None:
+    session = _homepage_session()
+    session.get.return_value = MagicMock(ok=True, content=b"PNG bytes")
+
+    with patch("smartschool_mcp.server._session", return_value=session):
+        result = srv.download_homepage_image(
+            "https://school.smartschool.be/public/school/Images/menu.PNG",
+            str(tmp_path),
+        )
+
+    assert result["name"] == "menu.PNG"
+    assert result["bytes_written"] == 9
+    assert (tmp_path / "menu.PNG").read_bytes() == b"PNG bytes"
+
+
+def test_download_homepage_image_rejects_foreign_host(tmp_path) -> None:
+    with patch("smartschool_mcp.server._session", _homepage_session):
+        result = srv.download_homepage_image(
+            "https://evil.example.com/x.png", str(tmp_path)
+        )
+
+    assert "error" in result
+    assert "Refusing" in result["error"]
+    assert not list(tmp_path.iterdir())
