@@ -25,6 +25,8 @@ Connect Claude (and other MCP clients) to your Smartschool account — ask about
 | `get_student_support_links` | School support resources and links |
 | `get_attachments` | List attachments for a specific message |
 | `download_attachment` | Download a specific attachment by message and file ID |
+| `get_homepage_blocks` | "In de kijker" blocks pinned to the homepage (e.g. monthly menu, calendar) |
+| `download_homepage_image` | Download an image embedded in a homepage block |
 
 ## Quick start — Claude Desktop
 
