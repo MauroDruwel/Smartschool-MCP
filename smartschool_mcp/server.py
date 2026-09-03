@@ -648,6 +648,18 @@ def get_student_support_links() -> list[dict[str, Any]]:
         return [{"error": f"Failed to retrieve support links: {e!s}"}]
 
 
+def _attachment_file_id(att: object) -> object | None:
+    """Return an Attachment's file id.
+
+    smartschool renamed ``Attachment.fileID`` to ``file_id`` in 271edcc (v0.8.0).
+    Accept both so the tool works across library versions.
+    """
+    file_id = getattr(att, "file_id", None)
+    if file_id is None:
+        file_id = getattr(att, "fileID", None)
+    return file_id
+
+
 @mcp.tool()
 def get_attachments(message_id: int) -> dict[str, Any]:
     """
@@ -667,7 +679,7 @@ def get_attachments(message_id: int) -> dict[str, Any]:
     try:
         attachments_list = [
             {
-                "file_id": getattr(att, "fileID", None),
+                "file_id": _attachment_file_id(att),
                 "name": getattr(att, "name", "Unknown"),
                 "mime_type": getattr(att, "mime", "Unknown"),
                 "size": getattr(att, "size", "Unknown"),
@@ -714,7 +726,7 @@ def download_attachment(
     try:
         target_attachment = None
         for att in Attachments(_session(), msg_id=message_id):
-            if getattr(att, "fileID", None) == file_id:
+            if str(_attachment_file_id(att)) == str(file_id):
                 target_attachment = att
                 break
 

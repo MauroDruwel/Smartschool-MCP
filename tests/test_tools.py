@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from smartschool import Attachment
+
 import smartschool_mcp.server as srv
 
 # ── Tool registration ─────────────────────────────────────────────────────────
@@ -246,8 +248,8 @@ def test_get_messages_includes_attachment_fields() -> None:
 
 
 def test_get_attachments_happy_path() -> None:
-    mock_att = MagicMock()
-    mock_att.fileID = 42
+    mock_att = MagicMock(spec=Attachment)
+    mock_att.file_id = 42
     mock_att.name = "homework.pdf"
     mock_att.mime = "application/pdf"
     mock_att.size = "100 KB"
@@ -282,8 +284,8 @@ def test_download_attachment_not_found() -> None:
 
 
 def test_download_attachment_writes_file(tmp_path) -> None:
-    mock_att = MagicMock()
-    mock_att.fileID = 42
+    mock_att = MagicMock(spec=Attachment)
+    mock_att.file_id = 42
     mock_att.name = "report.pdf"
     mock_att.mime = "application/pdf"
     mock_att.size = "50 KB"
