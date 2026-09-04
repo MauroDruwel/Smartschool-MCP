@@ -16,10 +16,12 @@ from smartschool_mcp.__main__ import _BearerAuthMiddleware
 def _make_scope(
     scope_type: str = "http",
     headers: list[tuple[bytes, bytes]] | None = None,
+    method: str = "GET",
 ) -> dict[str, Any]:
     return {
         "type": scope_type,
         "headers": headers or [],
+        "method": method,
     }
 
 
@@ -116,3 +118,10 @@ async def test_wrong_scheme_returns_401() -> None:
     messages = await _collect_responses(scope)
     start = next(m for m in messages if m.get("type") == "http.response.start")
     assert start["status"] == 401
+
+
+@pytest.mark.asyncio
+async def test_options_request_bypasses_auth() -> None:
+    scope = _make_scope(method="OPTIONS", headers=[])
+    messages = await _collect_responses(scope)
+    assert any(m.get("status") == 200 for m in messages)
