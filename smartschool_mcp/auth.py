@@ -570,6 +570,7 @@ async def _handle_login_post(
     # Credentials valid — store them and complete the OAuth flow
     cred_key = secrets.token_urlsafe(32)
     _credential_store[cred_key] = creds
+    _logger.info("Smartschool login succeeded for user=%s school=%s", username, school)
 
     auth_code = provider.complete_authorization(
         pending_id=pending_id,

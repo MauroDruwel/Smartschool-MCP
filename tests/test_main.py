@@ -21,6 +21,16 @@ def test_parse_auth_header_returns_authorization_value() -> None:
     assert entry._parse_auth_header(scope) == b"Bearer abc123"
 
 
+def test_parse_auth_header_lowercase_header_returns_value() -> None:
+    scope = {
+        "headers": [
+            (b"host", b"localhost"),
+            (b"authorization", b"Bearer abc123"),
+        ]
+    }
+    assert entry._parse_auth_header(scope) == b"Bearer abc123"
+
+
 def test_parse_auth_header_missing_returns_empty_bytes() -> None:
     assert entry._parse_auth_header({"headers": []}) == b""
 

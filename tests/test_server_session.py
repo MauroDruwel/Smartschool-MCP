@@ -131,7 +131,7 @@ def test_session_falls_back_to_env_when_import_error() -> None:
     mock_env.assert_called_once()
 
 
-def test_session_falls_back_to_env_when_credentials_not_found() -> None:
+def test_session_raises_auth_error_when_credentials_not_found() -> None:
     srv = _reload_server_module()
     token = SimpleNamespace(cred_key="missing-key")
 
