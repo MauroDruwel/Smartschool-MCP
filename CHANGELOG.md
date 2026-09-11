@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `download_attachment` calls `session.get()` directly instead of the upstream library's `Attachment.download()`, which incorrectly base64-decodes a raw binary response (upstream bug)
+- Expired sessions no longer make XML-backed tools (`get_messages`, `get_attachments`, `get_future_tasks`) report empty results instead of an error. The environment-credential session is now TTL-cached like the OAuth one, and every session is liveness-probed once with a `GET /` so a dead cookie triggers a real re-login
 
 ## [0.2.0] - 2026-03-25
 

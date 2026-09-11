@@ -46,7 +46,11 @@ All MCP tools live in `server.py` and are registered with `@mcp.tool()` decorato
 
 ### Session and credentials
 
-`_session()` is an `@lru_cache(maxsize=1)` function that creates a `Smartschool(EnvCredentials())` instance on first call. It is lazy on purpose — startup never touches the network, so missing credentials surface as tool-level errors rather than process crashes. In tests, `conftest.py` patches `_session` with an `autouse` fixture so no real credentials are needed.
+`_session()` picks a backend and returns a live session. In universal (OAuth) mode it resolves per-request credentials through `_cached_app_session`; otherwise it falls back to `_env_session`, which builds a `Smartschool(EnvCredentials())`. Both are lazy on purpose — startup never touches the network, so missing credentials surface as tool-level errors rather than process crashes. In tests, `conftest.py` patches `_session` with an `autouse` fixture so no real credentials are needed.
+
+Both caches are `cachetools.TTLCache`s bounded by `SESSION_TTL_SECONDS` (default 3600), because Smartschool expires cookies server-side and a stdio process otherwise lives for days on one session object.
+
+`_session()` then routes through `_ensure_live_session()`, which issues one `GET /` per cached session. This is load-bearing: `Smartschool.ensure_authenticated()` only checks whether an `authenticated_user` record exists, and the library restores that record from `<cache>/authenticated_user.yml` on every new instance — so an expired cookie still looks authenticated. REST endpoints self-heal (they redirect to `/login`, which `Session.request` handles transparently), but the XML dispatcher behind messages, attachments and future tasks answers an unauthenticated POST with an **empty 200**, which the library reads as an empty result set. The probe turns that silent empty into either a real re-login or a loud `AuthenticationError`. Its outcome is memoised on the session object so a failure is not retried on every tool call — repeated failed logins can lock a real Smartschool account.
 
 ### `smartschool` library
 
