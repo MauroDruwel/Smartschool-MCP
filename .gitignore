@@ -193,3 +193,9 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 dev/
+
+# Portal HAR / screenshots (cookies, tokens, student PII)
+docs/portal-api/raw/
+
+# Local clone of svaningelgem/smartschool (library PRs happen there, not in this repo)
+vendor/

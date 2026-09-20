@@ -14,12 +14,17 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def mock_session() -> MagicMock:
+def mock_session(request: pytest.FixtureRequest) -> MagicMock:
     """Replace the cached Smartschool session with a MagicMock.
 
     Applied automatically to every test in this suite.  Tests that need to
     configure specific return values can request this fixture explicitly.
+    Integration tests talk to a real session (or a subprocess) and skip the
+    patch.
     """
+    if request.node.get_closest_marker("integration"):
+        yield MagicMock()
+        return
     mock = MagicMock()
     with patch("smartschool_mcp.server._session", return_value=mock):
         yield mock
