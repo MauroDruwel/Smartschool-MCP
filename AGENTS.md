@@ -26,7 +26,7 @@ There are **three** different things people call “the Smartschool API”. This
 | **Portal REST / XML** (the website) | **Not officially documented.** Partial notes in the unofficial client: [planner.md](https://github.com/svaningelgem/smartschool/blob/master/docs/planner.md), [schedule.md](https://github.com/svaningelgem/smartschool/blob/master/docs/schedule.md) | Same HTTPS calls the logged-in browser makes (`depass.smartschool.be/planner/api/v1/…`, old Agenda XML dispatcher, …) | **Yes** — via the `smartschool` Python library |
 | **School SOAP API** | Per-school `/Webservices/V3` | Separate SOAP interface with an access code | **No** |
 
-We do **not** implement the partner API. We log in like a user and call the **same portal endpoints as the website**, wrapped by [`svaningelgem/smartschool`](https://github.com/svaningelgem/smartschool) (pinned in `uv.lock`). Until the Planner 1-to-1 branch is published, that pin is `{ path = "vendor/smartschool" }` (gitignored clone, branch `planner-calendar-1to1`).
+We do **not** implement the partner API. We log in like a user and call the **same portal endpoints as the website**, wrapped by [`svaningelgem/smartschool`](https://github.com/svaningelgem/smartschool) (pinned in `uv.lock`). Until the Planner 1-to-1 branch is published, that pin is `{ git = "https://github.com/markminnoye/smartschool.git", rev = "517de70" }` (branch `planner-calendar-1to1`).
 
 That portal surface is reverse-engineered. When Smartschool’s website adds query params or element types, the library (and then this MCP) has to catch up. Prefer **1-to-1 mapping** with those portal URLs over inventing extra MCP abstractions.
 
