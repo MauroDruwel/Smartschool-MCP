@@ -49,7 +49,7 @@ Issues = "https://github.com/MauroDruwel/Smartschool-MCP/issues"
 smartschool-mcp = "smartschool_mcp.__main__:main"
 
 [tool.uv.sources]
-smartschool = { git = "https://github.com/markminnoye/smartschool.git", rev = "5a31ad9" }
+smartschool = { git = "https://github.com/markminnoye/smartschool.git", rev = "517de70" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["smartschool_mcp"]
