@@ -86,16 +86,18 @@ The upstream library (`github.com/svaningelgem/smartschool`, pinned via `uv.lock
 
 ## Testing conventions
 
-Tests never hit the network. The `autouse` `mock_session` fixture in `conftest.py` patches `_session`. Three test files:
+Tests never hit the network unless `PORTAL_SMOKE=1` and `@pytest.mark.integration`. The `autouse` `mock_session` fixture in `conftest.py` patches `_session` (skipped for integration tests). CI runs `pytest -m "not integration"`.
 
 - **`test_helpers.py`** — pure unit tests for `_safe_format_date` and `_safe_get_teacher_names`
 - **`test_middleware.py`** — async tests for `_BearerAuthMiddleware` (valid/invalid tokens, OPTIONS bypass, non-HTTP scopes)
 - **`test_tools.py`** — error-handling tests (every tool must catch exceptions) and happy-path tests using `MagicMock` return values
+- **`test_portal_smoke_plan.py`** — catalog classifier for `scripts/smoke_portal.py` (no network)
+- **`test_portal_smoke.py`** — live catalog smoke via the CLI script
 
 ### Writing tests
 
 - All tests run without real credentials — use the `mock_session` fixture from `conftest.py`
-- Mark any test that needs real credentials with `@pytest.mark.integration`
+- Mark any test that needs real credentials with `@pytest.mark.integration` and also require `PORTAL_SMOKE=1`
 - Test **error paths** too: patch the relevant smartschool class to raise an exception and assert the returned `{"error": "..."}` dict
 
 ## HTTP transport changes
