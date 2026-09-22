@@ -42,7 +42,7 @@ The package is a single-file MCP server (`smartschool_mcp/server.py`) plus an en
 
 ### Tool registration
 
-All MCP tools live in `server.py` and are registered with `@mcp.tool()` decorators on plain Python functions. `FastMCP("Smartschool MCP")` is the server instance (`mcp`). Adding a new tool means writing a new `@mcp.tool()` function — no registration table to update.
+All MCP tools live in `server.py` and are registered with `@mcp.tool()` decorators on plain Python functions. `MCPServer("Smartschool MCP")` is the server instance (`mcp`). Adding a new tool means writing a new `@mcp.tool()` function — no registration table to update.
 
 ### Session and credentials
 

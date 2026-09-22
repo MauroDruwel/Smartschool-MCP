@@ -25,6 +25,7 @@ from mcp.server.auth.provider import (
     AccessToken,
     AuthorizationCode,
     AuthorizationParams,
+    OAuthAuthorizationServerProvider,
     RefreshToken,
     construct_redirect_uri,
 )
@@ -158,11 +159,15 @@ _REFRESH_TOKEN_TTL = 86400  # 24 hours
 _PENDING_AUTH_TTL = 600  # 10 minutes
 
 
-class SmartschoolOAuthProvider:
+class SmartschoolOAuthProvider(
+    OAuthAuthorizationServerProvider[
+        SmartschoolAuthCode, SmartschoolRefreshToken, SmartschoolAccessToken
+    ]
+):
     """In-memory OAuth 2.1 authorization server for Smartschool MCP.
 
     Implements the ``OAuthAuthorizationServerProvider`` protocol expected by
-    FastMCP.  All state lives in TTL-bounded caches so stale entries are
+    MCPServer.  All state lives in TTL-bounded caches so stale entries are
     automatically evicted.
     """
 

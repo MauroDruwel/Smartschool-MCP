@@ -85,8 +85,9 @@ uv run smartschool-mcp --transport streamable-http --port 8000
 ```
 smartschool_mcp/
 ├── __init__.py      # Package version
-├── __main__.py      # CLI entry point (stdio & HTTP transport)
-└── server.py        # FastMCP server + all tool definitions
+├── __main__.py      # CLI entry point (stdio & streamable-http transports)
+├── auth.py          # OAuth 2.1 provider (universal mode)
+└── server.py        # MCPServer + all tool definitions
 
 tests/
 ├── conftest.py      # Shared fixtures (mock_session)

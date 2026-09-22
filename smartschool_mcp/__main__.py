@@ -115,9 +115,7 @@ def _run_http(
     import uvicorn
     from starlette.middleware.cors import CORSMiddleware
 
-    # Stateless + JSON responses are recommended for production HTTP deployments.
-    mcp.settings.stateless_http = True
-    mcp.settings.json_response = True
+    transport_security = None
 
     if universal:
         if not issuer_url:
@@ -145,22 +143,22 @@ def _run_http(
         # The resource URL is the public MCP endpoint that clients connect to.
         resource_url = issuer_url.rstrip("/") + "/mcp"
 
-        # Configure OAuth on the FastMCP instance before building the ASGI app.
-        mcp._auth_server_provider = provider  # type: ignore[attr-defined]
-        mcp._token_verifier = ProviderTokenVerifier(provider)  # type: ignore[attr-defined,arg-type]
+        # Configure OAuth on the MCPServer instance before building the ASGI app.
+        mcp._auth_server_provider = provider
+        mcp._token_verifier = ProviderTokenVerifier(provider)  # type: ignore[arg-type]
         mcp.settings.auth = AuthSettings(
             issuer_url=AnyHttpUrl(issuer_url),
             resource_server_url=AnyHttpUrl(resource_url),
             client_registration_options=ClientRegistrationOptions(enabled=True),
             revocation_options=RevocationOptions(enabled=True),
         )
-        mcp._custom_starlette_routes.extend(login_routes(provider))  # type: ignore[attr-defined]
+        mcp._custom_starlette_routes.extend(login_routes(provider))
 
         # Allow the public hostname in addition to loopback addresses so that
         # requests forwarded by the reverse proxy (with Host: <public-domain>)
         # pass DNS-rebinding protection instead of getting 421.
         public_host = urlparse(issuer_url).netloc
-        mcp.settings.transport_security = TransportSecuritySettings(
+        transport_security = TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
             allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*", public_host],
         )
@@ -178,8 +176,14 @@ def _run_http(
 
     # Build the ASGI app.  In universal mode the OAuth routes, bearer-token
     # middleware, and auth-context middleware are wired automatically by
-    # FastMCP's streamable_http_app().
-    app: Any = mcp.streamable_http_app()
+    # MCPServer's streamable_http_app().
+    # Stateless + JSON responses are recommended for production HTTP deployments.
+    app: Any = mcp.streamable_http_app(
+        stateless_http=True,
+        json_response=True,
+        transport_security=transport_security,
+        host=host,
+    )
 
     if not universal:
         # Optional static Bearer-token guard for single-user deployments.

@@ -117,10 +117,11 @@ def test_run_http_requires_issuer_url_in_universal_mode(
 def test_run_http_non_universal_wraps_bearer_middleware(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    streamable_mock = MagicMock(return_value="asgi-app")
     fake_mcp = SimpleNamespace(
-        settings=SimpleNamespace(stateless_http=False, json_response=False),
+        settings=SimpleNamespace(),
         _custom_starlette_routes=[],
-        streamable_http_app=lambda: "asgi-app",
+        streamable_http_app=streamable_mock,
     )
     run_mock = MagicMock()
 
@@ -134,6 +135,12 @@ def test_run_http_non_universal_wraps_bearer_middleware(
 
     entry._run_http("127.0.0.1", 8001, universal=False)
 
+    streamable_mock.assert_called_once_with(
+        stateless_http=True,
+        json_response=True,
+        transport_security=None,
+        host="127.0.0.1",
+    )
     wrapped_app = run_mock.call_args.args[0]
     assert wrapped_app[0] == "cors"
     assert isinstance(wrapped_app[1], entry._BearerAuthMiddleware)
@@ -144,15 +151,13 @@ def test_run_http_non_universal_wraps_bearer_middleware(
 def test_run_http_universal_configures_oauth(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    streamable_mock = MagicMock(return_value="asgi-app")
     fake_mcp = SimpleNamespace(
         settings=SimpleNamespace(
-            stateless_http=False,
-            json_response=False,
             auth=None,
-            transport_security=None,
         ),
         _custom_starlette_routes=[],
-        streamable_http_app=lambda: "asgi-app",
+        streamable_http_app=streamable_mock,
     )
     run_mock = MagicMock()
     fake_provider = SimpleNamespace(issuer_url="https://mcp.example.com")
@@ -199,8 +204,6 @@ def test_run_http_universal_configures_oauth(
         issuer_url="https://mcp.example.com",
     )
 
-    assert fake_mcp.settings.stateless_http is True
-    assert fake_mcp.settings.json_response is True
     assert fake_mcp._token_verifier == ("verifier", fake_provider)  # type: ignore[attr-defined]
     assert fake_mcp._custom_starlette_routes == ["login-route"]
     assert str(fake_mcp.settings.auth["issuer_url"]) == "https://mcp.example.com/"
@@ -208,6 +211,11 @@ def test_run_http_universal_configures_oauth(
         str(fake_mcp.settings.auth["resource_server_url"])
         == "https://mcp.example.com/mcp"
     )
-    allowed_hosts = fake_mcp.settings.transport_security["allowed_hosts"]
+    streamable_mock.assert_called_once()
+    ts = streamable_mock.call_args.kwargs["transport_security"]
+    allowed_hosts = ts["allowed_hosts"]
     assert "mcp.example.com" in allowed_hosts[-1]
+    assert streamable_mock.call_args.kwargs["stateless_http"] is True
+    assert streamable_mock.call_args.kwargs["json_response"] is True
+    assert streamable_mock.call_args.kwargs["host"] == "0.0.0.0"
     run_mock.assert_called_once()
