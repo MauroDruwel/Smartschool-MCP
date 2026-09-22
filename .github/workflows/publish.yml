@@ -76,10 +76,9 @@ jobs:
         run: |
           LATEST=$(curl -fsSL https://api.github.com/repos/modelcontextprotocol/registry/releases/latest \
             | grep '"tag_name"' | cut -d '"' -f 4)
-          VERSION="${LATEST#v}"
           OS=$(uname -s | tr '[:upper:]' '[:lower:]')
           ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/${LATEST}/mcp-publisher_${VERSION}_${OS}_${ARCH}.tar.gz" \
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/${LATEST}/mcp-publisher_${OS}_${ARCH}.tar.gz" \
             | tar xz mcp-publisher
 
       - name: Authenticate with MCP Registry
