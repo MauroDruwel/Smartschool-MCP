@@ -878,13 +878,15 @@ def _parse_html(response: Any) -> Any:
     ``smartschool.bs4_html`` is not exported by every release, so fall back to
     BeautifulSoup directly rather than failing at import time.
     """
+    raw_html = getattr(response, "text", response)
     try:
         from smartschool import bs4_html
-    except ImportError:
+
+        return bs4_html(raw_html)
+    except (ImportError, TypeError):
         from bs4 import BeautifulSoup
 
-        return BeautifulSoup(response.text, "html.parser")
-    return bs4_html(response)
+        return BeautifulSoup(raw_html, "html.parser")
 
 
 def _absolutise(session: Smartschool, url: str) -> str:
