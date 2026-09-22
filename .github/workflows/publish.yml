@@ -3,6 +3,7 @@ name: Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 concurrency:
   group: release-${{ github.ref }}
@@ -48,6 +49,8 @@ jobs:
           path: dist/
 
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
 
   # ── 3. Publish to MCP Registry ──────────────────────────────────────────────
   publish-mcp:
@@ -62,7 +65,11 @@ jobs:
 
       - name: Stamp server.json with release version
         run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION=$(python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          fi
           python - <<EOF
           import json, pathlib
           p = pathlib.Path("server.json")
