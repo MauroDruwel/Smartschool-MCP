@@ -14,7 +14,7 @@ from typing import Any, TypedDict
 from urllib.parse import urlparse
 
 from cachetools import TTLCache, cached
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from smartschool import (
     AppCredentials,
     Attachments,
@@ -33,8 +33,10 @@ from smartschool import (
     StudentSupportLinks,
 )
 
+FastMCP = MCPServer  # Backward compatibility alias
+
 # MCP server - tools are registered via @mcp.tool() decorators below
-mcp = FastMCP("Smartschool MCP")
+mcp = MCPServer("Smartschool MCP")
 
 
 class AuthenticationError(RuntimeError):

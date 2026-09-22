@@ -38,7 +38,7 @@ CI runs lint → typecheck → tests (Python 3.10–3.13) in that order. All thr
 
 The package is a single-file MCP server (`smartschool_mcp/server.py`) plus entry-point modules:
 
-- **`server.py`** — all MCP tool definitions with `@mcp.tool()` decorators; uses `FastMCP("Smartschool MCP")` as the server instance
+- **`server.py`** — all MCP tool definitions with `@mcp.tool()` decorators; uses `MCPServer("Smartschool MCP")` as the server instance
 - **`__main__.py`** — CLI entry point handling transport selection (stdio vs streamable-http)
 - **`auth.py`** — OAuth 2.1 provider for universal mode (multi-user)
 - **`main.py`** — backward-compatibility shim (deprecated)

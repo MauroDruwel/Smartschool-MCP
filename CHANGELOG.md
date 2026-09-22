@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `download_attachment` calls `session.get()` directly instead of the upstream library's `Attachment.download()`, which incorrectly base64-decodes a raw binary response (upstream bug)
 - Expired sessions no longer make XML-backed tools (`get_messages`, `get_attachments`, `get_future_tasks`) report empty results instead of an error. The environment-credential session is now TTL-cached like the OAuth one, and every session is liveness-probed once with a `GET /` so a dead cookie triggers a real re-login
 
+### Changed
+
+- Upgraded `mcp` SDK to 2.x (`>=2.1.1,<3`), migrating `FastMCP` to `MCPServer`, updating HTTP transport configurations (`stateless_http`, `json_response`, `transport_security`) to `streamable_http_app()`, and typing `SmartschoolOAuthProvider` with `OAuthAuthorizationServerProvider`. `FastMCP` alias is preserved for backwards compatibility
+
 ## [0.2.0] - 2026-03-25
 
 ### Added
