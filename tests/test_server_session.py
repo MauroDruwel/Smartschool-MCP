@@ -5,9 +5,10 @@ from __future__ import annotations
 import importlib
 from builtins import __import__ as builtin_import
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+from cachetools import TTLCache
 from smartschool import AppCredentials
 
 
@@ -17,7 +18,21 @@ def _reload_server_module():
     return importlib.reload(srv)
 
 
-def test_env_session_uses_lru_cache() -> None:
+def _live_response(url: str = "https://school.smartschool.be/") -> MagicMock:
+    """A response object that looks like a successfully authenticated GET /."""
+    return MagicMock(url=url)
+
+
+def _live_session(url: str = "https://school.smartschool.be/") -> MagicMock:
+    """A session whose liveness probe succeeds."""
+    session = MagicMock()
+    session.get.return_value = _live_response(url)
+    # MagicMock auto-creates attributes, so the probe marker must start unset.
+    session._mcp_liveness_probe = None
+    return session
+
+
+def test_env_session_is_ttl_cached() -> None:
     srv = _reload_server_module()
     srv._env_session.cache_clear()
 
@@ -31,6 +46,121 @@ def test_env_session_uses_lru_cache() -> None:
     assert first == "session"
     assert second == "session"
     mock_ss.assert_called_once_with("env-creds")
+
+
+def test_env_session_cache_expires_so_stdio_sessions_are_rebuilt() -> None:
+    """A long-lived stdio process must not reuse one session object forever."""
+    srv = _reload_server_module()
+
+    assert isinstance(srv._env_session_cache, TTLCache)
+    assert srv._env_session_cache.maxsize == 1
+    assert srv._env_session_cache.ttl == srv._SESSION_TTL_SECONDS
+
+    # Expiry must actually rebuild the session, not hand back the stale one.
+    srv._env_session_cache.clear()
+    with (
+        patch("smartschool_mcp.server.EnvCredentials", return_value="env-creds"),
+        patch(
+            "smartschool_mcp.server.Smartschool", side_effect=["first", "second"]
+        ) as mock_ss,
+    ):
+        assert srv._env_session() == "first"
+        srv._env_session_cache.clear()  # stand in for the TTL elapsing
+        assert srv._env_session() == "second"
+
+    assert mock_ss.call_count == 2
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://school.smartschool.be/", False),
+        ("https://school.smartschool.be/index.php", False),
+        ("https://school.smartschool.be/login", True),
+        ("https://school.smartschool.be/account-verification", True),
+        ("https://school.smartschool.be/2fa", True),
+        ("https://school.smartschool.be/login/", True),
+        # "login" must match a whole path segment, not a substring.
+        ("https://school.smartschool.be/logins-overview", False),
+    ],
+)
+def test_is_auth_url(url: str, expected: bool) -> None:
+    srv = _reload_server_module()
+
+    assert srv._is_auth_url(url) is expected
+
+
+def test_ensure_live_session_returns_live_session() -> None:
+    srv = _reload_server_module()
+    session = _live_session()
+
+    assert srv._ensure_live_session(session) is session
+    session.get.assert_called_once_with("/")
+
+
+def test_ensure_live_session_probes_only_once_per_session() -> None:
+    """The probe costs an HTTP request, so it must not run per tool call."""
+    srv = _reload_server_module()
+    session = _live_session()
+
+    srv._ensure_live_session(session)
+    srv._ensure_live_session(session)
+
+    session.get.assert_called_once_with("/")
+
+
+def test_ensure_live_session_raises_when_redirected_to_login() -> None:
+    """A dead cookie that cannot be renewed must fail loudly, not silently."""
+    srv = _reload_server_module()
+    session = _live_session("https://school.smartschool.be/login")
+
+    with pytest.raises(srv.AuthenticationError, match="not authenticated"):
+        srv._ensure_live_session(session)
+
+
+def test_ensure_live_session_remembers_failure_without_retrying() -> None:
+    """Repeated logins risk locking the real account, so failures are cached."""
+    srv = _reload_server_module()
+    session = MagicMock()
+    session._mcp_liveness_probe = None
+    session.get.side_effect = RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        srv._ensure_live_session(session)
+    with pytest.raises(RuntimeError, match="boom"):
+        srv._ensure_live_session(session)
+
+    session.get.assert_called_once_with("/")
+
+
+def test_ensure_live_session_tolerates_sessions_that_reject_attributes() -> None:
+    """A session that cannot hold the marker still works, just unmemoised."""
+    srv = _reload_server_module()
+
+    class Slotted:
+        __slots__ = ()
+
+        def get(self, _url: str) -> MagicMock:
+            return _live_response()
+
+    session = Slotted()
+
+    assert srv._ensure_live_session(session) is session
+
+
+def test_session_runs_liveness_probe_on_env_session() -> None:
+    srv = _reload_server_module()
+
+    with (
+        patch.object(srv, "_env_session", return_value="env-session"),
+        patch.object(
+            srv, "_ensure_live_session", side_effect=lambda s: f"live:{s}"
+        ) as mock_probe,
+    ):
+        result = srv._session()
+
+    assert result == "live:env-session"
+    mock_probe.assert_called_once_with("env-session")
 
 
 def test_cached_app_session_uses_credentials_cache() -> None:
@@ -80,6 +210,7 @@ def test_session_uses_oauth_credentials_when_available() -> None:
             srv, "_cached_app_session", return_value="oauth-session"
         ) as mock_cached,
         patch.object(srv, "_env_session", return_value="env-session") as mock_env,
+        patch.object(srv, "_ensure_live_session", side_effect=lambda s: s),
     ):
         result = srv._session()
 
@@ -105,6 +236,7 @@ def test_session_falls_back_to_env_when_cred_key_missing() -> None:
             srv, "_cached_app_session", return_value="oauth-session"
         ) as mock_cached,
         patch.object(srv, "_env_session", return_value="env-session") as mock_env,
+        patch.object(srv, "_ensure_live_session", side_effect=lambda s: s),
     ):
         result = srv._session()
 
@@ -124,6 +256,7 @@ def test_session_falls_back_to_env_when_import_error() -> None:
     with (
         patch("builtins.__import__", side_effect=guarded_import),
         patch.object(srv, "_env_session", return_value="env-session") as mock_env,
+        patch.object(srv, "_ensure_live_session", side_effect=lambda s: s),
     ):
         result = srv._session()
 

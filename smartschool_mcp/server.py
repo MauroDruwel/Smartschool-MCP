@@ -6,11 +6,12 @@ messages and more.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import threading
 from datetime import date, timedelta
-from functools import lru_cache
 from typing import Any, TypedDict
+from urllib.parse import urlparse
 
 from cachetools import TTLCache, cached
 from mcp.server.fastmcp import FastMCP
@@ -40,17 +41,6 @@ class AuthenticationError(RuntimeError):
     """Authentication state is present but credentials are no longer valid."""
 
 
-@lru_cache(maxsize=1)
-def _env_session() -> Smartschool:
-    """Cached session using environment-variable credentials (single-user mode).
-
-    Lazy-initialized on first tool invocation so that import-time errors
-    (missing env vars, network failures) surface as tool errors rather than
-    crashing the process on startup.
-    """
-    return Smartschool(EnvCredentials())
-
-
 # How long (seconds) a cached Smartschool session is reused before the next
 # request for those credentials creates a fresh one.  Cookie-based sessions
 # expire server-side; keeping this below the server's idle-session timeout
@@ -60,6 +50,88 @@ _session_cache: TTLCache[tuple[str, str, str, str], Smartschool] = TTLCache(
     maxsize=256, ttl=_SESSION_TTL_SECONDS
 )
 _session_cache_lock = threading.Lock()
+
+_env_session_cache: TTLCache[tuple[()], Smartschool] = TTLCache(
+    maxsize=1, ttl=_SESSION_TTL_SECONDS
+)
+_env_session_lock = threading.Lock()
+
+
+@cached(cache=_env_session_cache, lock=_env_session_lock)
+def _env_session() -> Smartschool:
+    """TTL-cached session using environment-variable credentials.
+
+    Lazy-initialized on first tool invocation so that import-time errors
+    (missing env vars, network failures) surface as tool errors rather than
+    crashing the process on startup.
+
+    The TTL matters most in stdio mode, where a single long-lived process
+    would otherwise reuse one session object for days.  See
+    ``_ensure_live_session`` for why an expired cookie is not self-healing.
+    """
+    return Smartschool(EnvCredentials())
+
+
+# Path segments Smartschool redirects to when a session is not authenticated.
+# Mirrors ``smartschool.Smartschool._is_auth_url`` without depending on a
+# private API.
+_AUTH_PATH_SEGMENTS = frozenset({"login", "account-verification", "2fa"})
+
+# Attribute used to remember the liveness-probe outcome on a session object,
+# so the probe runs once per cached session rather than once per tool call.
+_PROBE_RESULT_ATTR = "_mcp_liveness_probe"
+
+
+def _is_auth_url(url: str) -> bool:
+    """Return True if *url* is one of Smartschool's authentication pages."""
+    return bool(_AUTH_PATH_SEGMENTS & set(urlparse(url).path.split("/")))
+
+
+def _ensure_live_session(session: Smartschool) -> Smartschool:
+    """Verify *session* is really authenticated, re-logging in if it is not.
+
+    ``Smartschool.ensure_authenticated()`` is not a liveness check: it only
+    asks whether an ``authenticated_user`` record exists, and
+    ``Smartschool.__post_init__`` restores that record from
+    ``<cache>/authenticated_user.yml`` on every new instance.  A session whose
+    persisted cookie has expired server-side therefore still reports itself as
+    authenticated.
+
+    That stays invisible for REST endpoints, which redirect to ``/login`` so
+    that ``Session.request`` transparently drives the login chain and retries.
+    But the XML dispatcher backing messages, attachments and future tasks
+    answers an unauthenticated POST with an **empty 200**, which the library
+    reads as an empty result set -- so those tools report an empty mailbox
+    instead of an error.
+
+    One plain ``GET /`` closes the gap: it goes through ``Session.request``, so
+    a dead cookie triggers the real login chain while a live one costs a single
+    request and no login.  The outcome is remembered on the session object, so
+    a failure is re-raised for the rest of that session's TTL instead of
+    re-attempting a login on every tool call.
+    """
+    probe = getattr(session, _PROBE_RESULT_ATTR, None)
+    if probe is None:
+        try:
+            response = session.get("/")
+            probe = (
+                AuthenticationError(
+                    "Smartschool session is not authenticated; check the "
+                    f"SMARTSCHOOL_* credentials (landed on {response.url!r})"
+                )
+                if _is_auth_url(response.url)
+                else False
+            )
+        except Exception as exc:
+            # Remembered and re-raised below, so one bad login is not retried
+            # on every subsequent tool call.
+            probe = exc
+        with contextlib.suppress(AttributeError):
+            setattr(session, _PROBE_RESULT_ATTR, probe)
+
+    if isinstance(probe, BaseException):
+        raise probe
+    return session
 
 
 @cached(cache=_session_cache, lock=_session_cache_lock)
@@ -109,13 +181,15 @@ def _session() -> Smartschool:
                 raise AuthenticationError(
                     "OAuth credentials expired; re-authentication required"
                 )
-            return _cached_app_session(
-                creds.username, creds.password, creds.main_url, creds.mfa
+            return _ensure_live_session(
+                _cached_app_session(
+                    creds.username, creds.password, creds.main_url, creds.mfa
+                )
             )
     except ImportError:
         pass
 
-    return _env_session()
+    return _ensure_live_session(_env_session())
 
 
 def _safe_get_teacher_names(
