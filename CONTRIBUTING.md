@@ -136,15 +136,21 @@ uv run pytest
 # Run with coverage
 uv run pytest --cov=smartschool_mcp --cov-report=term-missing
 
-# Run only integration tests (requires real credentials in env)
-uv run pytest -m integration
+# Live read-only catalog smoke (same login+cookies as the MCP; never in CI)
+uv run python scripts/smoke_portal.py              # phase 1 legacy library, then GETs
+uv run python scripts/smoke_portal.py --legacy-only
+PORTAL_SMOKE=1 uv run pytest -m integration        # same run via pytest
 ```
+
+`.env` with `SMARTSCHOOL_*` is loaded if present (never commit it). Writes, auth, CSRF, and unmapped XML POSTs are skipped. The table prints status and item counts only — no response bodies.
 
 ### Writing tests
 
 - All tests run without real credentials — use the `mock_session` fixture
   from `conftest.py`.
 - Mark any test that needs real credentials with `@pytest.mark.integration`.
+  Those tests must also require `PORTAL_SMOKE=1` so a local `uv run pytest`
+  with credentials in the environment still never hits Smartschool.
 - Test **error paths** too: patch the relevant smartschool class to raise an
   exception and assert the returned `{"error": "..."}` dict.
 

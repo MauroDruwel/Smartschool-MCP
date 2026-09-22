@@ -74,7 +74,7 @@ def test_get_messages_returns_error_on_exception() -> None:
 
 def test_get_schedule_returns_error_on_exception() -> None:
     with patch(
-        "smartschool_mcp.server.SmartschoolLessons", side_effect=RuntimeError("503")
+        "smartschool_mcp.server.PlannedElements", side_effect=RuntimeError("503")
     ):
         result = srv.get_schedule()
     assert isinstance(result, dict)
@@ -102,6 +102,83 @@ def test_get_planned_elements_returns_error_on_exception() -> None:
         result = srv.get_planned_elements()
     assert isinstance(result, dict)
     assert "error" in result
+
+
+def _planner_element_mock() -> MagicMock:
+    period = MagicMock()
+    period.date_time_from.strftime.return_value = "2026-09-17 08:25"
+    period.date_time_to.strftime.return_value = "2026-09-17 09:15"
+    period.whole_day = False
+    course = MagicMock()
+    course.name = "Wiskunde"
+    location = MagicMock()
+    location.title = "A12"
+    user = MagicMock()
+    user.name.starting_with_first_name = "Jan Jansen"
+    organisers = MagicMock()
+    organisers.users = [user]
+    element = MagicMock()
+    element.name = "Wiskunde"
+    element.planned_element_type = "planned-lessons"
+    element.period = period
+    element.color = "#ffcc00"
+    element.courses = [course]
+    element.locations = [location]
+    element.organisers = organisers
+    element.unconfirmed = False
+    element.pinned = False
+    element.assignment_type = None
+    return element
+
+
+def test_get_schedule_returns_planner_elements() -> None:
+    element = _planner_element_mock()
+    with patch(
+        "smartschool_mcp.server.PlannedElements", return_value=[element]
+    ) as mock_pe:
+        result = srv.get_schedule(date_offset=0)
+
+    assert result["total"] == 1
+    assert "lessons" not in result
+    item = result["elements"][0]
+    assert item["type"] == "planned-lessons"
+    assert item["name"] == "Wiskunde"
+    assert item["courses"] == ["Wiskunde"]
+    assert item["locations"] == ["A12"]
+    assert item["organisers"] == ["Jan Jansen"]
+    kwargs = mock_pe.call_args.kwargs
+    assert kwargs.get("types") is None
+    assert kwargs["from_date"] == kwargs["till_date"]
+
+
+def test_get_planned_elements_omits_types_by_default() -> None:
+    element = _planner_element_mock()
+    with patch(
+        "smartschool_mcp.server.PlannedElements", return_value=[element]
+    ) as mock_pe:
+        result = srv.get_planned_elements(days_ahead=7)
+
+    assert result["total"] == 1
+    assert result["planned_elements"][0]["type"] == "planned-lessons"
+    kwargs = mock_pe.call_args.kwargs
+    assert kwargs.get("types") is None
+    assert kwargs.get("includes") is None
+
+
+def test_get_planned_elements_passes_types_and_includes() -> None:
+    with patch("smartschool_mcp.server.PlannedElements", return_value=[]) as mock_pe:
+        srv.get_planned_elements(
+            from_date="2026-09-17",
+            to_date="2026-09-21",
+            types="planned-assignments,planned-to-dos",
+            includes="icon,courses",
+        )
+
+    kwargs = mock_pe.call_args.kwargs
+    assert kwargs["types"] == "planned-assignments,planned-to-dos"
+    assert kwargs["includes"] == "icon,courses"
+    assert kwargs["from_date"].isoformat() == "2026-09-17"
+    assert kwargs["till_date"].isoformat() == "2026-09-21"
 
 
 def test_get_student_support_links_returns_error_on_exception() -> None:

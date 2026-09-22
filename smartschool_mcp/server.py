@@ -28,7 +28,6 @@ from smartschool import (
     Reports,
     Results,
     Smartschool,
-    SmartschoolLessons,
     StudentSupportLinks,
 )
 
@@ -141,6 +140,52 @@ def _safe_format_date(date_obj: Any) -> str | None:
         return date_obj.strftime("%Y-%m-%d") if date_obj else None
     except (AttributeError, ValueError):
         return None
+
+
+def _csv_or_none(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _organiser_names(element: object) -> list[str]:
+    organisers = getattr(element, "organisers", None)
+    users = getattr(organisers, "users", None) or []
+    names: list[str] = []
+    for user in users:
+        name = getattr(user, "name", None)
+        first = getattr(name, "starting_with_first_name", None)
+        if first:
+            names.append(str(first))
+        elif name:
+            names.append(str(name))
+    return names
+
+
+def _planned_element_dict(element: object) -> dict[str, Any]:
+    period = getattr(element, "period", None)
+    start = getattr(period, "date_time_from", None) if period else None
+    end = getattr(period, "date_time_to", None) if period else None
+    assignment_type = getattr(element, "assignment_type", None)
+    courses = getattr(element, "courses", None) or []
+    locations = getattr(element, "locations", None) or []
+    return {
+        "name": getattr(element, "name", "") or "",
+        "type": getattr(element, "planned_element_type", None),
+        "from": start.strftime("%Y-%m-%d %H:%M") if start else None,
+        "to": end.strftime("%Y-%m-%d %H:%M") if end else None,
+        "whole_day": getattr(period, "whole_day", None) if period else None,
+        "color": getattr(element, "color", None),
+        "courses": [c.name for c in courses],
+        "locations": [getattr(loc, "title", str(loc)) for loc in locations],
+        "organisers": _organiser_names(element),
+        "unconfirmed": getattr(element, "unconfirmed", None),
+        "pinned": getattr(element, "pinned", None),
+        "assignment_type": (
+            assignment_type.name if assignment_type is not None else None
+        ),
+    }
 
 
 @mcp.tool()
@@ -398,7 +443,7 @@ def get_messages(
             box_type_enum = BoxType.INBOX  # Default fallback
 
         # Get message headers — headers already carry from_, subject, date, unread
-        all_headers = list(MessageHeaders(_session(), box_type=box_type_enum))
+        all_headers = list(MessageHeaders(_session(), box_type=box_type_enum))  # type: ignore[abstract, var-annotated]
 
         # Apply sender filter directly from headers (no full message fetch needed)
         if sender_filter:
@@ -419,7 +464,7 @@ def get_messages(
                     continue
                 # Fall back to fetching full message body
                 try:
-                    full_msg = Message(_session(), header.id).get()
+                    full_msg = Message(_session(), header.id).get()  # type: ignore[abstract, var-annotated]
                     body = (getattr(full_msg, "body", "") or "").lower()
                     if search_query.lower() in body:
                         header._cached_message = full_msg
@@ -455,7 +500,7 @@ def get_messages(
             cached = getattr(header, "_cached_message", None)
             if include_body:
                 try:
-                    full_msg = cached or Message(_session(), header.id).get()
+                    full_msg = cached or Message(_session(), header.id).get()  # type: ignore[abstract]
                     message_data["body"] = getattr(full_msg, "body", "")
                 except Exception:
                     message_data["body"] = ""
@@ -493,42 +538,39 @@ def get_messages(
 
 
 @mcp.tool()
-def get_schedule(date_offset: int = 0) -> dict[str, Any]:
+def get_schedule(date_offset: int = 0, includes: str | None = None) -> dict[str, Any]:
     """
-    Retrieve the lesson schedule for a given day.
+    Retrieve the Planner calendar for a given day.
+
+    Same portal call as the website timetable: GET
+    /planner/api/v1/planned-elements/user/{id} with from/to only (no types
+    filter). Schoolagenda XML is not used.
 
     Args:
         date_offset: Days from today (0=today, 1=tomorrow, -1=yesterday,
             default: 0)
+        includes: Optional comma-separated expansions the SPA uses
+            (e.g. icon,courses,locations,upload-folders,labels)
 
     Returns:
-        Dictionary with the lessons scheduled for the given date.
+        Dictionary with planned elements for the given date.
     """
     try:
         target_date = date.today() + timedelta(days=date_offset)
-        lessons_list = []
+        elements_list = []
 
-        for lesson in SmartschoolLessons(_session(), timestamp_to_use=target_date):
-            lessons_list.append(
-                {
-                    "moment_id": lesson.moment_id,
-                    "date": _safe_format_date(lesson.date),
-                    "hour": lesson.hour,
-                    "course": lesson.course_title,
-                    "classroom": lesson.classroom_title,
-                    "teacher": lesson.teacher_title,
-                    "subject": lesson.subject,
-                    "note": lesson.note,
-                    "color": lesson.color,
-                    "assignment_end_status": lesson.assignment_end_status,
-                    "test_deadline_status": lesson.test_deadline_status,
-                }
-            )
+        for element in PlannedElements(
+            _session(),
+            from_date=target_date,
+            till_date=target_date,
+            includes=_csv_or_none(includes),
+        ):
+            elements_list.append(_planned_element_dict(element))
 
         return {
             "date": target_date.strftime("%Y-%m-%d"),
-            "lessons": lessons_list,
-            "total": len(lessons_list),
+            "elements": elements_list,
+            "total": len(elements_list),
         }
 
     except Exception as e:
@@ -595,48 +637,55 @@ def get_reports() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-def get_planned_elements(days_ahead: int = 34) -> dict[str, Any]:
+def get_planned_elements(
+    days_ahead: int = 34,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    types: str | None = None,
+    includes: str | None = None,
+) -> dict[str, Any]:
     """
-    Retrieve planned assignments and to-dos from the Smartschool planner.
+    Retrieve planned elements from the Smartschool planner.
+
+    Default matches the website calendar: from/to only, no types filter, so
+    lessons, activities, placeholders, assignments, and to-dos are included.
+    Pass types for a sidebar subset (comma-separated planned-* values).
 
     Args:
-        days_ahead: Number of days ahead to fetch (default: 34)
+        days_ahead: Number of days ahead when from_date/to_date are omitted
+            (default: 34)
+        from_date: Inclusive start date YYYY-MM-DD (default: today)
+        to_date: Inclusive end date YYYY-MM-DD (default: from_date + days_ahead)
+        types: Optional comma-separated plannedElementType filter
+        includes: Optional comma-separated expansions (icon,courses,locations,…)
 
     Returns:
         Dictionary with planned elements including dates, courses, and assignment types.
     """
     try:
-        from_date = date.today()
-        till_date = from_date + timedelta(days=days_ahead)
+        start = date.fromisoformat(from_date) if from_date else date.today()
+        end = (
+            date.fromisoformat(to_date)
+            if to_date
+            else start + timedelta(days=days_ahead)
+        )
         elements_list = []
 
-        for element in PlannedElements(_session(), till_date=till_date):
-            period = getattr(element, "period", None)
-            element_data = {
-                "name": element.name,
-                "type": element.planned_element_type,
-                "from": (
-                    period.date_time_from.strftime("%Y-%m-%d %H:%M") if period else None
-                ),
-                "to": (
-                    period.date_time_to.strftime("%Y-%m-%d %H:%M") if period else None
-                ),
-                "color": element.color,
-                "courses": [c.name for c in element.courses] if element.courses else [],
-                "unconfirmed": element.unconfirmed,
-                "pinned": element.pinned,
-                "assignment_type": (
-                    element.assignment_type.name if element.assignment_type else None
-                ),
-            }
-            elements_list.append(element_data)
+        for element in PlannedElements(
+            _session(),
+            from_date=start,
+            till_date=end,
+            types=_csv_or_none(types),
+            includes=_csv_or_none(includes),
+        ):
+            elements_list.append(_planned_element_dict(element))
 
         return {
             "planned_elements": elements_list,
             "total": len(elements_list),
             "period": {
-                "from": from_date.strftime("%Y-%m-%d"),
-                "to": till_date.strftime("%Y-%m-%d"),
+                "from": start.strftime("%Y-%m-%d"),
+                "to": end.strftime("%Y-%m-%d"),
             },
         }
 
@@ -700,6 +749,7 @@ def get_attachments(message_id: int) -> dict[str, Any]:
         - get_attachments(249184) -> List attachments for message 249184
     """
     try:
+        raw_attachments = list(Attachments(_session(), msg_id=message_id))  # type: ignore[abstract, var-annotated]
         attachments_list = [
             {
                 "file_id": _attachment_file_id(att),
@@ -707,7 +757,7 @@ def get_attachments(message_id: int) -> dict[str, Any]:
                 "mime_type": getattr(att, "mime", "Unknown"),
                 "size": getattr(att, "size", "Unknown"),
             }
-            for att in Attachments(_session(), msg_id=message_id)
+            for att in raw_attachments
         ]
         return {
             "message_id": message_id,
@@ -748,7 +798,7 @@ def download_attachment(
 
     try:
         target_attachment = None
-        for att in Attachments(_session(), msg_id=message_id):
+        for att in Attachments(_session(), msg_id=message_id):  # type: ignore[abstract, var-annotated]
             if str(_attachment_file_id(att)) == str(file_id):
                 target_attachment = att
                 break
@@ -804,11 +854,12 @@ def _parse_html(response: Any) -> Any:
     """
     try:
         from smartschool import bs4_html
-    except ImportError:
+
+        return bs4_html(response)
+    except Exception:
         from bs4 import BeautifulSoup
 
         return BeautifulSoup(response.text, "html.parser")
-    return bs4_html(response)
 
 
 def _absolutise(session: Smartschool, url: str) -> str:
