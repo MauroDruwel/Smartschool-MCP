@@ -3,6 +3,7 @@
 <!-- mcp-name: io.github.MauroDruwel/smartschool-mcp -->
 
 [![CI](https://github.com/MauroDruwel/Smartschool-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/MauroDruwel/Smartschool-MCP/actions/workflows/ci.yml)
+[![Mauro Quality Gate](https://img.shields.io/badge/Mauro%20Quality%20Gate-Passed-2ea44f?style=flat&logo=github)](https://github.com/MauroDruwel/quality-gate)
 [![codecov](https://codecov.io/gh/MauroDruwel/Smartschool-MCP/branch/main/graph/badge.svg)](https://codecov.io/gh/MauroDruwel/Smartschool-MCP)
 [![PyPI version](https://img.shields.io/pypi/v/smartschool-mcp)](https://pypi.org/project/smartschool-mcp/)
 [![License: MIT](https://img.shields.io/github/license/MauroDruwel/Smartschool-MCP)](LICENSE)

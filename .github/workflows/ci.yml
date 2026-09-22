@@ -82,3 +82,21 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
           fail_ci_if_error: false
+
+  # ── Mauro Quality Gate ───────────────────────────────────────────────────────
+  quality-gate:
+    name: Mauro Quality Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Run Mauro Quality Gate Audit
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/MauroDruwel/quality-gate/main/scripts/audit_project.py -o audit_project.py
+          python audit_project.py . --strict
+

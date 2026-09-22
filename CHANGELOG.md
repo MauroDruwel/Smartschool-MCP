@@ -7,11 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-22
+
 ### Added
 
 - `get_attachments(message_id)` — list all attachments for a message (name, mime type, size, file ID)
 - `download_attachment(message_id, file_id, save_path?)` — download an attachment; defaults to `~/Downloads/smartschool/`, accepts optional `save_path`
 - `has_attachments` and `attachment_count` fields in every `get_messages` result
+- Mauro Quality Gate (MQG) certification: `.editorconfig`, strict audit workflow check in CI, and repo topic refinement
 
 ### Fixed
 
@@ -21,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Upgraded `mcp` SDK to 2.x (`>=2.1.1,<3`), migrating `FastMCP` to `MCPServer`, updating HTTP transport configurations (`stateless_http`, `json_response`, `transport_security`) to `streamable_http_app()`, and typing `SmartschoolOAuthProvider` with `OAuthAuthorizationServerProvider`. `FastMCP` alias is preserved for backwards compatibility
+- Updated dependencies: `smartschool>=0.10.0`, `cachetools>=7.1.8`, `types-cachetools>=7.0.0.20260713`, dev tools (`pytest>=9.1.1`, `pytest-cov>=7.1.0`), and GitHub actions (`actions/checkout@v7`, `peter-evans/create-pull-request@v8`)
 
 ## [0.2.0] - 2026-03-25
 
@@ -68,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Claude Desktop integration via stdio transport
 - PyPI distribution and MCP Registry listing
 
-[Unreleased]: https://github.com/MauroDruwel/Smartschool-MCP/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/MauroDruwel/Smartschool-MCP/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/MauroDruwel/Smartschool-MCP/compare/v0.1.4...v0.3.0
 [0.2.0]: https://github.com/MauroDruwel/Smartschool-MCP/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/MauroDruwel/Smartschool-MCP/releases/tag/v0.1.4
