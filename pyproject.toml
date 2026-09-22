@@ -37,7 +37,7 @@ dev = [
     "black>=26.5.1",
     "ruff>=0.16.6",
     "mypy>=2.3.1",
-    "types-cachetools>=7.0.0.20260518",
+    "types-cachetools>=7.0.0.20260713",
 ]
 
 [project.urls]
