@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `get_children` — list linked children on Mijn kinderen (`POST /Studentcard/Student/getStudents` with XHR headers; topnav gotourl fills the current child's switch id when `accountID` is 0)
+- `switch_child(account_id)` — switch the session to another linked child (`GET /Studentcard/Chain/gotourl/accountID/{accountId}`); Planner/results then follow that child. Cross-school hops (De Ring `/otp/...`) are followed without replaying the original host.
 - Claude Code plugin login guard: one attempt, `auth_failed` blockade, host pin, no mixed env/config credentials
 - Claude Code plugin under `claude-plugin/`: local skill and read-only scripts for login, agenda, berichten, and cijfers (one credential file, pinned `smartschool` library, no hosted MCP)
 - Read-only portal catalog smoke (`scripts/smoke_portal.py`): same `Smartschool` login+cookie session as the MCP, legacy library rows first, then HAR GETs. Writes/auth/unmapped XML POSTs are skipped; CI never runs it (`PORTAL_SMOKE=1` + `pytest -m integration`).
@@ -29,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `switch_child` follows the live Mijn kinderen chain from HAR: gotourl → `/otp/{token}` → relative `/Studentcard`. Foreign hops use a raw GET with browser navigation headers so the library cannot POST this account's password on `/login`. Cross-school `account-verification` may still run on a new device; TOTP stays blocked.
 - Claude Code plugin: an empty course list or empty body is not a login lockout; `/login?error=1` still writes `auth_failed`; a leading `https://` on `SMARTSCHOOL_MAIN_URL` is stripped; an expired message session exits with an error instead of an empty inbox; grade detail lookups re-raise authentication errors
 - Planner week fetch no longer fails when lesson payloads omit `canUserRestoreFromTrash` (`smartschool@517de70`)
 - `download_attachment` calls `session.get()` directly instead of the upstream library's `Attachment.download()`, which incorrectly base64-decodes a raw binary response (upstream bug)
