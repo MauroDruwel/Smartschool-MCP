@@ -325,7 +325,8 @@ def _public_folders(folders: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def calendar_element_dict(raw: dict[str, Any]) -> dict[str, Any]:
     """One planner row for get_schedule / get_planned_elements."""
     prepared = prepare_planned_element(raw)
-    period = raw.get("period") if isinstance(raw.get("period"), dict) else {}
+    raw_period = raw.get("period")
+    period: dict[str, Any] = raw_period if isinstance(raw_period, dict) else {}
     assignment = raw.get("assignmentType")
     assignment_name = None
     if isinstance(assignment, dict):
@@ -342,7 +343,7 @@ def calendar_element_dict(raw: dict[str, Any]) -> dict[str, Any]:
         "type": _text(raw.get("plannedElementType")) or None,
         "from": _fmt_when(period.get("dateTimeFrom")),
         "to": _fmt_when(period.get("dateTimeTo")),
-        "whole_day": period.get("wholeDay") if isinstance(period, dict) else None,
+        "whole_day": period.get("wholeDay"),
         "color": _text(raw.get("color")) or None,
         "courses": _names_from_courses(raw),
         "locations": _location_titles(raw),

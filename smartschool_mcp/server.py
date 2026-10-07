@@ -785,6 +785,7 @@ def get_course_documents(
 
         safe_browse = _checked_browse_url(browse_url, course_id, resolved_platform)
         course = CourseCondensed(
+            session=session,
             name=course_name or str(course_id),
             teacher=teacher,
             url="",
@@ -849,7 +850,7 @@ def download_course_document(
             course_id=course_id, platform_id=platform_id, browse_url=browse_url
         )
         if "error" in listing:
-            return listing
+            return {"error": str(listing["error"])}
         match = next(
             (
                 item
@@ -883,6 +884,7 @@ def download_course_document(
         resolved_platform = listing["platform_id"]
         safe_browse = _checked_browse_url(browse_url, course_id, resolved_platform)
         course = CourseCondensed(
+            session=session,
             name=str(course_id),
             teacher="",
             url="",
@@ -901,10 +903,11 @@ def download_course_document(
         for item in folder.items:
             if getattr(item, "id", None) != document_id:
                 continue
-            if isinstance(getattr(item, "link", None), str):
+            link = getattr(item, "link", None)
+            if isinstance(link, str):
                 return {
                     "error": "That row is a link, not a file",
-                    "link": item.link,
+                    "link": link,
                 }
             download_url = getattr(item, "download_url", None)
             filename = getattr(item, "name", None) or filename

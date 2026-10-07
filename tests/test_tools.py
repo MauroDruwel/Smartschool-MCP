@@ -275,6 +275,19 @@ def test_download_planner_file_writes_bytes(mock_session: MagicMock, tmp_path) -
     assert mock_session.get.call_args.args[0] == "/planner/api/v1/files/file-1/download"
 
 
+def test_download_planner_file_refuses_foreign_url(mock_session: MagicMock) -> None:
+    raw = _planner_raw()
+    raw["uploadFolders"][0]["files"][0]["downloadUrl"] = "https://evil.example/file"
+    mock_session.authenticated_user = {"id": "49_1_2"}
+    mock_session.create_url.return_value = "https://school.smartschool.be/"
+    mock_session.json.return_value = [raw]
+    result = srv.download_planner_file(
+        _ELEMENT_ID, "file-1", from_date="2026-09-17", to_date="2026-09-17"
+    )
+    assert "no same-host download URL" in result["error"]
+    mock_session.get.assert_not_called()
+
+
 def test_download_planner_file_refuses_missing_url(mock_session: MagicMock) -> None:
     raw = _planner_raw()
     del raw["uploadFolders"][0]["files"][0]["downloadUrl"]
