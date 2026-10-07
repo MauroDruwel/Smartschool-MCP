@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import importlib
+import os
 from builtins import __import__ as builtin_import
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -22,6 +24,7 @@ def test_env_session_uses_lru_cache() -> None:
     srv._env_session.cache_clear()
 
     with (
+        patch("smartschool_mcp.server.activate_saved_credentials"),
         patch("smartschool_mcp.server.EnvCredentials", return_value="env-creds"),
         patch("smartschool_mcp.server.Smartschool", return_value="session") as mock_ss,
     ):
@@ -31,6 +34,45 @@ def test_env_session_uses_lru_cache() -> None:
     assert first == "session"
     assert second == "session"
     mock_ss.assert_called_once_with("env-creds")
+
+
+def test_env_session_reads_the_shared_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("smartschool_mcp.credentials.keychain_enabled", lambda: False)
+    monkeypatch.setattr(
+        "smartschool_mcp.credentials._legacy_credential_files", lambda: []
+    )
+    for key in (
+        "SMARTSCHOOL_USER",
+        "SMARTSCHOOL_USERNAME",
+        "SMARTSCHOOL_PASSWORD",
+        "SMARTSCHOOL_MAIN_URL",
+        "SMARTSCHOOL_MFA",
+        "SMARTSCHOOL_PROFILE",
+        "GROK_PLUGIN_DATA",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    from smartschool_mcp.credentials import save_credentials
+
+    save_credentials("student", "pw-secret", "school", "2014-01-02", "Emma")
+    srv = _reload_server_module()
+    srv._env_session.cache_clear()
+    seen: dict[str, str] = {}
+
+    def _creds() -> str:
+        seen["user"] = os.environ["SMARTSCHOOL_USERNAME"]
+        seen["child"] = os.environ["SMARTSCHOOL_CHILD"]
+        return "env-creds"
+
+    with (
+        patch("smartschool_mcp.server.EnvCredentials", side_effect=_creds),
+        patch("smartschool_mcp.server.Smartschool", return_value="session"),
+    ):
+        assert srv._env_session() == "session"
+
+    assert seen == {"user": "student", "child": "Emma"}
 
 
 def test_cached_app_session_uses_credentials_cache() -> None:

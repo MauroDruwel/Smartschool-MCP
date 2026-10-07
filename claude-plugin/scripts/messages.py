@@ -13,7 +13,14 @@ from smartschool import (
     SmartSchoolAuthenticationError,
 )
 
-from _common import format_date, main, open_session
+from _common import (
+    add_profile_argument,
+    combine_profiles,
+    format_date,
+    main,
+    open_sessions,
+    use_profile_argument,
+)
 
 _BOXES = ("INBOX", "SENT", "DRAFT", "SCHEDULED", "TRASH")
 
@@ -41,6 +48,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Fetch one message by id (implies body).",
     )
+    add_profile_argument(parser)
     return parser.parse_args(argv)
 
 
@@ -125,45 +133,48 @@ def build(argv: list[str] | None = None) -> dict[str, Any]:
     if box_name not in _BOXES:
         return {"error": f"Unknown box {args.box!r}. Use {', '.join(_BOXES)}."}
     box = getattr(BoxType, box_name)
+    use_profile_argument(args)
 
-    session = open_session()
-    # XML mailbox calls return an empty 200 when the cookie is dead and
-    # authenticated_user.yml is still present. A live courses read either
-    # refreshes the session or raises before we can print an empty inbox.
-    session.confirm_login()
-    if args.message_id is not None:
-        full = Message(session, args.message_id).get()
-        return message_row(full, body=str(getattr(full, "body", "") or ""))
+    def fetch(session: object) -> dict[str, Any]:
+        # XML mailbox calls return an empty 200 when the cookie is dead and
+        # authenticated_user.yml is still present. A live courses read either
+        # refreshes the session or raises before we can print an empty inbox.
+        session.confirm_login()  # type: ignore[attr-defined]
+        if args.message_id is not None:
+            full = Message(session, args.message_id).get()  # type: ignore[arg-type]
+            return message_row(full, body=str(getattr(full, "body", "") or ""))
 
-    headers = filter_headers(
-        list(MessageHeaders(session, box_type=box)),
-        sender=args.sender,
-        search=args.search,
-        session=session,
-    )
-    page = headers[args.offset : args.offset + args.limit]
-    rows = []
-    for header in page:
-        body = _body_text(session, header) if args.body else None
-        rows.append(message_row(header, body=body))
+        headers = filter_headers(
+            list(MessageHeaders(session, box_type=box)),  # type: ignore[arg-type]
+            sender=args.sender,
+            search=args.search,
+            session=session,
+        )
+        page = headers[args.offset : args.offset + args.limit]
+        rows = []
+        for header in page:
+            body = _body_text(session, header) if args.body else None
+            rows.append(message_row(header, body=body))
 
-    end_index = args.offset + args.limit
-    return {
-        "messages": rows,
-        "pagination": {
-            "limit": args.limit,
-            "offset": args.offset,
-            "total": len(headers),
-            "returned": len(rows),
-            "has_more": end_index < len(headers),
-        },
-        "filters": {
-            "box_type": box_name,
-            "search_query": args.search,
-            "sender_filter": args.sender,
-            "include_body": args.body,
-        },
-    }
+        end_index = args.offset + args.limit
+        return {
+            "messages": rows,
+            "pagination": {
+                "limit": args.limit,
+                "offset": args.offset,
+                "total": len(headers),
+                "returned": len(rows),
+                "has_more": end_index < len(headers),
+            },
+            "filters": {
+                "box_type": box_name,
+                "search_query": args.search,
+                "sender_filter": args.sender,
+                "include_body": args.body,
+            },
+        }
+
+    return combine_profiles(open_sessions(), fetch)
 
 
 if __name__ == "__main__":
