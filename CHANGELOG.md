@@ -9,13 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `get_schedule` uses the Planner calendar GET (`PlannedElements`, no `types` filter) instead of the removed Schoolagenda XML
+- `get_schedule` uses the Planner calendar GET (no `types` filter) instead of the removed Schoolagenda XML. The MCP reads that JSON itself so element id, description, and upload folders are not dropped by `PlannedElement`
 - `get_planned_elements` matches that calendar GET by default; optional `types` and `includes` for sidebar subsets
 - Pin `smartschool` to `markminnoye/smartschool@517de70` (`planner-calendar-1to1`) until upstream merges Planner calendar
 - Bump `smartschool` git pin so XML tools (agenda, messages, …) call `ensure_authenticated()` before the dispatcher POST (empty 200 without a login redirect)
 
 ### Added
 
+- `get_schedule` and `get_planned_elements` include planner element `id`, `description`, and `upload_folders`
+- `get_planner_attachments` / `download_planner_file` — list and download files attached to a planner item. The website `includes=upload-folders` query is sent; the JSON field names and the file download URL are **not live-verified** (fixtures at `smartschool@517de70` do not contain them). Download uses a URL from that payload only.
+- `get_course_documents` / `download_course_document` — course Documenten via `TopNavCourses` + `FolderItem` (`/Documents/Index/Index/...` and `/Documents/Download/Index/...`, both in the library fixtures)
 - `get_children` — list linked children on Mijn kinderen (`POST /Studentcard/Student/getStudents` with XHR headers; topnav gotourl fills the current child's switch id when `accountID` is 0)
 - `switch_child(account_id)` — switch the session to another linked child (`GET /Studentcard/Chain/gotourl/accountID/{accountId}`); Planner/results then follow that child. Cross-school hops (De Ring `/otp/...`) are followed without replaying the original host.
 - Claude Code plugin login guard: one attempt, `auth_failed` blockade, host pin, no mixed env/config credentials
