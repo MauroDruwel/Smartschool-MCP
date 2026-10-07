@@ -31,15 +31,64 @@ from smartschool import (
     Reports,
     Results,
     Smartschool,
+    SmartSchoolAuthenticationError,
     StudentSupportLinks,
 )
 
+from smartschool_mcp.guard import (
+    GuardedSession,
+    auth_failed_message,
+    auth_failed_path,
+    normalize_school_main_url,
+)
+
+
+def _server_instructions() -> str | None:
+    """Tell the model which child the desktop install dialog named.
+
+    ``SMARTSCHOOL_CHILD_NAME`` is optional. Credentials stay in the four
+    ``SMARTSCHOOL_*`` variables ``EnvCredentials`` already reads.
+    """
+    child = " ".join(os.environ.get("SMARTSCHOOL_CHILD_NAME", "").split())
+    if not child:
+        return None
+    return (
+        f"The Smartschool account in this session is for the child {child}. "
+        "Before reading the timetable, grades, tasks, or messages, call "
+        "get_children and switch_child to that child when they are not "
+        "already the current child. "
+        "A failed login is stored as auth_failed; do not submit the password again."
+    )
+
+
 # MCP server - tools are registered via @mcp.tool() decorators below
-mcp = FastMCP("Smartschool MCP")
+mcp = FastMCP("Smartschool MCP", instructions=_server_instructions())
 
 
 class AuthenticationError(RuntimeError):
     """Authentication state is present but credentials are no longer valid."""
+
+
+def _open_env_session() -> Smartschool:
+    """Env-var session with a normalised school host and the login lockout.
+
+    A bare subdomain (``dering``) becomes ``dering.smartschool.be``. A pasted
+    ``https://…smartschool.be`` URL is reduced to that host. An existing
+    ``auth_failed`` file refuses before any credential POST.
+    """
+    creds = EnvCredentials()
+    if creds.main_url.strip():
+        from smartschool_mcp.auth import _validate_school_url
+
+        normalized = normalize_school_main_url(creds.main_url)
+        validated = _validate_school_url(normalized)
+        if not validated:
+            raise ValueError("Untrusted or invalid Smartschool host")
+        object.__setattr__(creds, "main_url", validated)
+    username = creds.username.strip()
+    if username and auth_failed_path(username).exists():
+        raise SmartSchoolAuthenticationError(auth_failed_message(username))
+    return GuardedSession(creds)
 
 
 @lru_cache(maxsize=1)
@@ -50,7 +99,7 @@ def _env_session() -> Smartschool:
     (missing env vars, network failures) surface as tool errors rather than
     crashing the process on startup.
     """
-    return Smartschool(EnvCredentials())
+    return _open_env_session()
 
 
 # How long (seconds) a cached Smartschool session is reused before the next
@@ -79,8 +128,10 @@ def _cached_app_session(
     validated_host = _validate_school_url(main_url)
     if not validated_host:
         raise ValueError("Untrusted or invalid Smartschool host")
+    if auth_failed_path(username).exists():
+        raise SmartSchoolAuthenticationError(auth_failed_message(username))
 
-    return Smartschool(
+    return GuardedSession(
         AppCredentials(
             username=username,
             password=password,

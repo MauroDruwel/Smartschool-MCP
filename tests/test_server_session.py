@@ -21,16 +21,13 @@ def test_env_session_uses_lru_cache() -> None:
     srv = _reload_server_module()
     srv._env_session.cache_clear()
 
-    with (
-        patch("smartschool_mcp.server.EnvCredentials", return_value="env-creds"),
-        patch("smartschool_mcp.server.Smartschool", return_value="session") as mock_ss,
-    ):
+    with patch.object(srv, "_open_env_session", return_value="session") as mock_open:
         first = srv._env_session()
         second = srv._env_session()
 
     assert first == "session"
     assert second == "session"
-    mock_ss.assert_called_once_with("env-creds")
+    mock_open.assert_called_once_with()
 
 
 def test_cached_app_session_uses_credentials_cache() -> None:
@@ -43,7 +40,7 @@ def test_cached_app_session_uses_credentials_cache() -> None:
             side_effect=lambda **kwargs: kwargs,
         ) as mock_creds,
         patch(
-            "smartschool_mcp.server.Smartschool", return_value="app-session"
+            "smartschool_mcp.server.GuardedSession", return_value="app-session"
         ) as mock_ss,
     ):
         first = srv._cached_app_session("user", "pass", "school.smartschool.be", "")

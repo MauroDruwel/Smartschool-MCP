@@ -34,6 +34,12 @@ Connect Claude (and other MCP clients) to your Smartschool account — ask about
 | `get_homepage_blocks` | "In de kijker" blocks pinned to the homepage (e.g. monthly menu, calendar) |
 | `download_homepage_image` | Download an image embedded in a homepage block |
 
+## Claude Desktop extension
+
+Parents install a one-click `.mcpb` from the **MCPB** GitHub Actions artifact (`smartschool-mcp-mcpb`). The Dutch steps, test questions, and login-lockout reset are in [`docs/claude-desktop-test.md`](docs/claude-desktop-test.md).
+
+The bundle vendors `markminnoye/smartschool` at `517de70` and starts the existing stdio server with `uv`. The install dialog maps onto the env vars the server already reads: `SMARTSCHOOL_MAIN_URL` (a bare subdomain such as `dering` becomes `dering.smartschool.be`), `SMARTSCHOOL_USERNAME`, `SMARTSCHOOL_PASSWORD`, `SMARTSCHOOL_MFA` (birth date), and `SMARTSCHOOL_CHILD_NAME` (which child `get_children` / `switch_child` should select). A failed login writes `~/.cache/smartschool/<user>/auth_failed` after one password POST.
+
 ## Quick start — Claude Desktop
 
 ```bash
@@ -151,6 +157,7 @@ After setting up the tunnel/proxy, your server will be reachable at `https://you
 | `SMARTSCHOOL_PASSWORD` | — | — | Your Smartschool password (single-user mode only) |
 | `SMARTSCHOOL_MAIN_URL` | — | — | School hostname, e.g. `school.smartschool.be` (single-user mode only) |
 | `SMARTSCHOOL_MFA` | — | — | Date of birth `YYYY-MM-DD` if required (single-user mode only) |
+| `SMARTSCHOOL_CHILD_NAME` | — | — | Optional child name for the desktop bundle. Read at startup into the server instructions so `switch_child` can target that child. |
 
 ## Contributing
 
