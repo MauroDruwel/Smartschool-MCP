@@ -13,7 +13,15 @@ from typing import Any
 
 from smartschool import PlannedElements
 
-from _common import csv_or_none, main, open_session, planned_element
+from _common import (
+    add_profile_argument,
+    combine_profiles,
+    csv_or_none,
+    main,
+    open_sessions,
+    planned_element,
+    use_profile_argument,
+)
 
 
 def _parse_date(value: str) -> date:
@@ -62,6 +70,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Optional comma-separated expansions (icon,courses,locations,…).",
     )
+    add_profile_argument(parser)
     return parser.parse_args(argv)
 
 
@@ -99,25 +108,30 @@ def resolve_range(
 
 def build(argv: list[str] | None = None) -> dict[str, Any]:
     args = parse_args(argv)
+    use_profile_argument(args)
     start, end = resolve_range(args)
-    elements = [
-        planned_element(element)
-        for element in PlannedElements(
-            open_session(),
-            from_date=start,
-            till_date=end,
-            types=csv_or_none(args.types),
-            includes=csv_or_none(args.includes),
-        )
-    ]
-    payload: dict[str, Any] = {
-        "period": {"from": start.isoformat(), "to": end.isoformat()},
-        "elements": elements,
-        "total": len(elements),
-    }
-    if start == end:
-        payload["date"] = start.isoformat()
-    return payload
+
+    def fetch(session: object) -> dict[str, Any]:
+        elements = [
+            planned_element(element)
+            for element in PlannedElements(
+                session,  # type: ignore[arg-type]
+                from_date=start,
+                till_date=end,
+                types=csv_or_none(args.types),
+                includes=csv_or_none(args.includes),
+            )
+        ]
+        payload: dict[str, Any] = {
+            "period": {"from": start.isoformat(), "to": end.isoformat()},
+            "elements": elements,
+            "total": len(elements),
+        }
+        if start == end:
+            payload["date"] = start.isoformat()
+        return payload
+
+    return combine_profiles(open_sessions(), fetch)
 
 
 if __name__ == "__main__":

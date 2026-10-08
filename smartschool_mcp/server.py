@@ -34,6 +34,8 @@ from smartschool import (
     StudentSupportLinks,
 )
 
+from smartschool_mcp.credentials import activate_saved_credentials
+
 # MCP server - tools are registered via @mcp.tool() decorators below
 mcp = FastMCP("Smartschool MCP")
 
@@ -50,6 +52,7 @@ def _env_session() -> Smartschool:
     (missing env vars, network failures) surface as tool errors rather than
     crashing the process on startup.
     """
+    activate_saved_credentials()
     return Smartschool(EnvCredentials())
 
 
