@@ -13,7 +13,14 @@ import argparse
 from datetime import date, timedelta
 from typing import Any
 
-from _common import csv_or_none, main, open_session
+from _common import (
+    add_profile_argument,
+    combine_profiles,
+    csv_or_none,
+    main,
+    open_sessions,
+    use_profile_argument,
+)
 from smartschool_mcp.planner_fields import fetch_calendar
 
 
@@ -63,6 +70,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Optional comma-separated expansions (icon,courses,locations,…).",
     )
+    add_profile_argument(parser)
     return parser.parse_args(argv)
 
 
@@ -100,22 +108,27 @@ def resolve_range(
 
 def build(argv: list[str] | None = None) -> dict[str, Any]:
     args = parse_args(argv)
+    use_profile_argument(args)
     start, end = resolve_range(args)
-    elements = fetch_calendar(
-        open_session(),
-        start,
-        end,
-        csv_or_none(args.types),
-        csv_or_none(args.includes),
-    )
-    payload: dict[str, Any] = {
-        "period": {"from": start.isoformat(), "to": end.isoformat()},
-        "elements": elements,
-        "total": len(elements),
-    }
-    if start == end:
-        payload["date"] = start.isoformat()
-    return payload
+
+    def fetch(session: object) -> dict[str, Any]:
+        elements = fetch_calendar(
+            session,
+            start,
+            end,
+            csv_or_none(args.types),
+            csv_or_none(args.includes),
+        )
+        payload: dict[str, Any] = {
+            "period": {"from": start.isoformat(), "to": end.isoformat()},
+            "elements": elements,
+            "total": len(elements),
+        }
+        if start == end:
+            payload["date"] = start.isoformat()
+        return payload
+
+    return combine_profiles(open_sessions(), fetch)
 
 
 if __name__ == "__main__":

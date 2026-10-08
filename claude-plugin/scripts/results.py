@@ -8,7 +8,14 @@ from typing import Any
 
 from smartschool import Results, SmartSchoolAuthenticationError
 
-from _common import format_date, main, open_session
+from _common import (
+    add_profile_argument,
+    combine_profiles,
+    format_date,
+    main,
+    open_sessions,
+    use_profile_argument,
+)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -25,6 +32,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Skip per-grade average/median lookups.",
     )
+    add_profile_argument(parser)
     return parser.parse_args(argv)
 
 
@@ -87,7 +95,18 @@ def build(argv: list[str] | None = None) -> dict[str, Any]:
         return {"error": "limit and offset must be >= 0"}
 
     include_details = not args.no_details
-    all_results = list(Results(open_session()))
+    use_profile_argument(args)
+
+    def fetch(session: object) -> dict[str, Any]:
+        all_results = list(Results(session))  # type: ignore[arg-type]
+        return _page_results(all_results, args, include_details=include_details)
+
+    return combine_profiles(open_sessions(), fetch)
+
+
+def _page_results(
+    all_results: list[object], args: argparse.Namespace, *, include_details: bool
+) -> dict[str, Any]:
     if args.course:
         needle = args.course.lower()
         filtered = []

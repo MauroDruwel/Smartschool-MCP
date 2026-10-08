@@ -36,6 +36,7 @@ from smartschool import (
     TopNavCourses,
 )
 
+from smartschool_mcp.credentials import activate_saved_credentials
 from smartschool_mcp.planner_fields import (
     ASSIGNMENT_DETAIL_TYPES,
     PLANNER_ATTACHMENT_INCLUDES,
@@ -63,6 +64,7 @@ def _env_session() -> Smartschool:
     (missing env vars, network failures) surface as tool errors rather than
     crashing the process on startup.
     """
+    activate_saved_credentials()
     return Smartschool(EnvCredentials())
 
 
