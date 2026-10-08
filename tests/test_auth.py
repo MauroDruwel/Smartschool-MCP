@@ -689,7 +689,7 @@ class TestLoginHandlers:
         marker = tmp_path / "auth_failed"
         marker.write_text("login failed\n", encoding="utf-8")
         monkeypatch.setattr(
-            "smartschool_mcp.auth.auth_failed_path", lambda _user: marker
+            "smartschool_mcp.auth.auth_failed_path", lambda _user, _school: marker
         )
         provider = MagicMock()
         provider.get_pending_auth.return_value = object()

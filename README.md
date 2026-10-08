@@ -12,7 +12,7 @@ Connect Claude (and other MCP clients) to your Smartschool account — ask about
 
 ## Claude Code plugin
 
-[`claude-plugin/`](claude-plugin/) is a downloadable Claude Code plugin (skill + local scripts) for one account: agenda, berichten, and cijfers. It calls the same pinned `smartschool` library as this repo. Install with `claude --plugin-dir ./claude-plugin` after `uv sync`; steps and the example env file are in [`claude-plugin/README.md`](claude-plugin/README.md). The MCP server in this repository stays as-is. A hosted web demo is out of scope.
+[`claude-plugin/`](claude-plugin/) is a downloadable Claude Code plugin (skill + local scripts) for agenda, berichten, and cijfers. It uses the same account file as this MCP server. Install with `claude --plugin-dir ./claude-plugin` after `uv sync`; steps are in [`claude-plugin/README.md`](claude-plugin/README.md). A hosted web demo is out of scope.
 
 ## Tools
 
@@ -38,36 +38,30 @@ Connect Claude (and other MCP clients) to your Smartschool account — ask about
 
 Parents install a one-click `.mcpb` from the **MCPB** GitHub Actions artifact (`smartschool-mcp-mcpb`). The Dutch steps, test questions, and login-lockout reset are in [`docs/claude-desktop-test.md`](docs/claude-desktop-test.md).
 
-The bundle vendors `markminnoye/smartschool` at `517de70` and starts the existing stdio server with `uv`. The install dialog maps onto the env vars the server already reads: `SMARTSCHOOL_MAIN_URL` (a bare subdomain such as `dering` becomes `dering.smartschool.be`), `SMARTSCHOOL_USERNAME`, `SMARTSCHOOL_PASSWORD`, `SMARTSCHOOL_MFA` (birth date), and `SMARTSCHOOL_CHILD_NAME` (which child `get_children` / `switch_child` should select). A failed login writes `~/.cache/smartschool/<user>/auth_failed` after one password POST.
+The bundle vendors `markminnoye/smartschool` at `517de70` and starts the existing stdio server with `uv`. It does not ask for a school, username, or password. The server reads the shared account file from the quick start below (`~/.config/smartschool/credentials.json`, or `$GROK_PLUGIN_DATA/credentials.json`). The child name saved on that profile is what `get_children` / `switch_child` should select. A failed login writes `~/.cache/smartschool/<subdomain>/<user>/auth_failed` after one password POST — the same marker as the Claude plugin.
 
 ## Quick start — Claude Desktop
 
+Save the account once in `~/.config/smartschool/credentials.json` (the same file the Claude plugin and Grok plugin use). The server reads it when the process has no `SMARTSCHOOL_USERNAME` and `SMARTSCHOOL_PASSWORD`. Set `GROK_PLUGIN_DATA` to store that file in another directory. `SMARTSCHOOL_PROFILE` picks one login when several are saved. Each profile's `children` list stores a name and, when known, the `account_id` and `platform` returned by `get_children`.
+
 ```bash
-uvx mcp install smartschool-mcp \
-  -e SMARTSCHOOL_USERNAME="you" \
-  -e SMARTSCHOOL_PASSWORD="secret" \
-  -e SMARTSCHOOL_MAIN_URL="school.smartschool.be" \
-  -e SMARTSCHOOL_MFA="YYYY-MM-DD"
+uvx mcp install smartschool-mcp
 ```
 
-Or add it manually to `claude_desktop_config.json`:
+Or add it manually to `claude_desktop_config.json` without a second copy of the password:
 
 ```json
 {
   "mcpServers": {
     "smartschool": {
       "command": "uvx",
-      "args": ["smartschool-mcp"],
-      "env": {
-        "SMARTSCHOOL_USERNAME": "you",
-        "SMARTSCHOOL_PASSWORD": "secret",
-        "SMARTSCHOOL_MAIN_URL": "school.smartschool.be",
-        "SMARTSCHOOL_MFA": "YYYY-MM-DD"
-      }
+      "args": ["smartschool-mcp"]
     }
   }
 }
 ```
+
+A complete `SMARTSCHOOL_*` environment overrides that one process. It is not written back into the file.
 
 Config file locations: `%APPDATA%\Claude\claude_desktop_config.json` (Windows) · `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) · `~/.config/Claude/claude_desktop_config.json` (Linux)
 
@@ -84,13 +78,9 @@ The server supports **Streamable HTTP** transport for use as a remote integratio
 
 ### Single-user mode
 
-One server instance, your credentials in environment variables:
+One server instance. The account comes from `~/.config/smartschool/credentials.json`, unless this process already has `SMARTSCHOOL_USERNAME` and `SMARTSCHOOL_PASSWORD`:
 
 ```bash
-export SMARTSCHOOL_USERNAME="..."
-export SMARTSCHOOL_PASSWORD="..."
-export SMARTSCHOOL_MAIN_URL="school.smartschool.be"
-export SMARTSCHOOL_MFA="YYYY-MM-DD"
 export MCP_API_KEY="a-long-random-secret"   # optional but recommended
 
 smartschool-mcp --transport streamable-http --host 0.0.0.0 --port 8000
@@ -153,11 +143,12 @@ After setting up the tunnel/proxy, your server will be reachable at `https://you
 | `MCP_UNIVERSAL` | `--universal` | off | Enable universal mode (set to `1`, `true`, or `yes`) |
 | `MCP_ISSUER_URL` | `--issuer-url` | — | **Required in universal mode.** Public URL of the server, e.g. `https://mcp.example.com` |
 | `SESSION_TTL_SECONDS` | — | `3600` | How long to cache Smartschool sessions (universal mode) |
-| `SMARTSCHOOL_USERNAME` | — | — | Your Smartschool username (single-user mode only) |
-| `SMARTSCHOOL_PASSWORD` | — | — | Your Smartschool password (single-user mode only) |
-| `SMARTSCHOOL_MAIN_URL` | — | — | School hostname, e.g. `school.smartschool.be` (single-user mode only) |
-| `SMARTSCHOOL_MFA` | — | — | Date of birth `YYYY-MM-DD` if required (single-user mode only) |
-| `SMARTSCHOOL_CHILD_NAME` | — | — | Optional child name for the desktop bundle. Read at startup into the server instructions so `switch_child` can target that child. |
+| `SMARTSCHOOL_USERNAME` | — | — | Process override for the username. Otherwise the shared credentials file is used |
+| `SMARTSCHOOL_PASSWORD` | — | — | Process override for the password |
+| `SMARTSCHOOL_MAIN_URL` | — | — | Process override for the school host |
+| `SMARTSCHOOL_MFA` | — | — | Process override for the child birth date `YYYY-MM-DD` |
+| `SMARTSCHOOL_PROFILE` | — | — | Which saved login to use (`dering`, `dering:user`, or `user@dering`) |
+| `GROK_PLUGIN_DATA` | — | — | Directory for `credentials.json` instead of `~/.config/smartschool/` |
 
 ## Contributing
 

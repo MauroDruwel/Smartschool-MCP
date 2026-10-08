@@ -553,10 +553,10 @@ async def _handle_login_post(
             mfa=mfa,
         )
 
-    if auth_failed_path(username).exists():
+    if auth_failed_path(username, school).exists():
         return _render_login_form(
             pending_id,
-            error=auth_failed_message(username),
+            error=auth_failed_message(username, school),
             school=school_raw,
             username=username,
             mfa=mfa,

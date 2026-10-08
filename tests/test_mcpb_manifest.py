@@ -20,7 +20,7 @@ def _server_tool_names() -> list[str]:
     return re.findall(r"@mcp\.tool\(\)\ndef (\w+)\(", source)
 
 
-def test_manifest_launches_stdio_with_uv_and_user_config() -> None:
+def test_manifest_launches_stdio_without_a_second_credential_store() -> None:
     manifest = _manifest()
     assert manifest["manifest_version"] == "0.4"
     assert manifest["server"]["type"] == "uv"
@@ -30,28 +30,13 @@ def test_manifest_launches_stdio_with_uv_and_user_config() -> None:
     assert "python" in config["args"]
     assert "-m" in config["args"]
     assert "smartschool_mcp" in config["args"]
-    assert config["env"]["MCP_TRANSPORT"] == "stdio"
-    assert config["env"]["SMARTSCHOOL_MAIN_URL"] == "${user_config.school}"
-    assert config["env"]["SMARTSCHOOL_USERNAME"] == "${user_config.username}"
-    assert config["env"]["SMARTSCHOOL_PASSWORD"] == "${user_config.password}"
-    assert config["env"]["SMARTSCHOOL_MFA"] == "${user_config.birth_date}"
-    assert config["env"]["SMARTSCHOOL_CHILD_NAME"] == "${user_config.child_name}"
-
-    user_config = manifest["user_config"]
-    assert set(user_config) == {
-        "school",
-        "username",
-        "password",
-        "birth_date",
-        "child_name",
-    }
-    assert user_config["password"]["sensitive"] is True
-    assert user_config["birth_date"]["sensitive"] is True
-    assert user_config["school"].get("sensitive", False) is False
-    for field in user_config.values():
-        assert field["required"] is True
-    assert "dering" in user_config["school"]["description"]
-    assert "JJJJ-MM-DD" in user_config["birth_date"]["description"]
+    assert config["env"] == {"MCP_TRANSPORT": "stdio"}
+    assert "user_config" not in manifest
+    blob = json.dumps(manifest)
+    assert "user_config" not in blob
+    assert "SMARTSCHOOL_PASSWORD" not in blob
+    assert "SMARTSCHOOL_USERNAME" not in blob
+    assert "credentials.json" in blob
 
 
 def test_manifest_tools_match_the_server() -> None:
@@ -76,6 +61,8 @@ def test_dutch_parent_guide_lists_tools_and_lockout() -> None:
     assert "auth_failed" in doc
     assert "niet opnieuw proberen" in doc
     assert "error=1" in doc
+    assert "credentials.json" in doc
+    assert "vijf velden" not in doc
     lowered = doc.lower()
     assert "terminal" not in lowered
     assert "git clone" not in lowered

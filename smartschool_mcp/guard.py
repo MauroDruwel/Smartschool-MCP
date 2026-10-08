@@ -1,9 +1,11 @@
 """One-shot Smartschool login guard for the MCP server.
 
 Same rule as the Claude plugin scripts: one credential POST, then
-``~/.cache/smartschool/<user>/auth_failed``. A response that stays on
-``/login`` (including ``/login?error=1``) is a failure. Later calls refuse
-before another password is sent.
+``~/.cache/smartschool/<subdomain>/<user>/auth_failed``. That is the cache
+directory of the shared credential store, so the Desktop bundle and the
+plugin share one lockout. A response that stays on ``/login`` (including
+``/login?error=1``) is a failure. Later calls refuse before another password
+is sent.
 
 The file lock is held only around that POST. The plugin scripts hold it until
 the process exits; this server keeps running, so a process-lifetime lock would
@@ -24,6 +26,8 @@ from urllib.parse import urlparse
 
 from smartschool import Smartschool, SmartSchoolAuthenticationError
 
+from smartschool_mcp.credentials import CredentialStoreError, profile_cache_dir
+
 _logger = logging.getLogger(__name__)
 
 _SCHOOL_SUFFIX = ".smartschool.be"
@@ -31,18 +35,36 @@ _LABEL_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 _LOGIN_LOCK = threading.Lock()
 
 
-def cache_dir(username: str) -> Path:
-    return Path.home() / ".cache" / "smartschool" / username
+def cache_dir(username: str, main_url: str) -> Path:
+    """Session cache for one login, shared with the credential store.
+
+    ``*.smartschool.be`` accounts use ``profile_cache_dir``
+    (``~/.cache/smartschool/<subdomain>/<user>``). An allowlisted host that
+    is not a Smartschool subdomain still gets a directory under that cache
+    root so the lockout file can be written.
+    """
+    try:
+        return profile_cache_dir(main_url, username)
+    except (SmartSchoolAuthenticationError, CredentialStoreError):
+        host = "unknown"
+        if main_url.strip():
+            try:
+                host = credential_hostname(main_url)
+            except SmartSchoolAuthenticationError:
+                host = "unknown"
+        safe_host = host.replace("/", "").replace("\\", "") or "unknown"
+        safe_user = username.strip() or "unknown"
+        return Path.home() / ".cache" / "smartschool" / safe_host / safe_user
 
 
-def auth_failed_path(username: str) -> Path:
-    return cache_dir(username) / "auth_failed"
+def auth_failed_path(username: str, main_url: str) -> Path:
+    return cache_dir(username, main_url) / "auth_failed"
 
 
-def auth_failed_message(username: str) -> str:
+def auth_failed_message(username: str, main_url: str) -> str:
     return (
         "LOGIN FAILED, niet opnieuw proberen. "
-        f"Verwijder dit bestand handmatig: {auth_failed_path(username)}"
+        f"Verwijder dit bestand handmatig: {auth_failed_path(username, main_url)}"
     )
 
 
@@ -162,9 +184,9 @@ def _acquire_session_lock(fd: int):
 
 
 @contextlib.contextmanager
-def _credential_post_lock(username: str) -> Iterator[None]:
+def _credential_post_lock(username: str, main_url: str) -> Iterator[None]:
     """Block a second password POST in this process and in other local clients."""
-    directory = cache_dir(username)
+    directory = cache_dir(username, main_url)
     directory.mkdir(parents=True, exist_ok=True)
     fd = os.open(directory / ".session.lock", os.O_CREAT | os.O_RDWR, 0o600)
     release = _acquire_session_lock(fd)
@@ -193,9 +215,11 @@ class GuardedSession(Smartschool):
 
     def _do_login(self, response):  # type: ignore[override]
         self._assert_credential_target(getattr(response, "url", ""))
-        username = self._require_credentials().username
-        with _credential_post_lock(username):
-            if self._login_failed or auth_failed_path(username).exists():
+        creds = self._require_credentials()
+        username = creds.username
+        main_url = creds.main_url
+        with _credential_post_lock(username, main_url):
+            if self._login_failed or auth_failed_path(username, main_url).exists():
                 self._block()
             self._password_posts += 1
             _logger.info("Smartschool login attempt")
@@ -216,8 +240,8 @@ class GuardedSession(Smartschool):
 
     def _do_login_verification(self, response):  # type: ignore[override]
         self._assert_credential_target(getattr(response, "url", ""))
-        username = self._require_credentials().username
-        with _credential_post_lock(username):
+        creds = self._require_credentials()
+        with _credential_post_lock(creds.username, creds.main_url):
             _logger.info("Smartschool account verification")
             posted = super()._do_login_verification(response)
         posted_url = str(getattr(posted, "url", ""))
@@ -227,16 +251,20 @@ class GuardedSession(Smartschool):
         return posted
 
     def _refuse_if_blocked(self) -> None:
-        username = self._require_credentials().username
-        if auth_failed_path(username).exists():
-            raise SmartSchoolAuthenticationError(auth_failed_message(username))
+        creds = self._require_credentials()
+        if auth_failed_path(creds.username, creds.main_url).exists():
+            raise SmartSchoolAuthenticationError(
+                auth_failed_message(creds.username, creds.main_url)
+            )
 
     def _block(self) -> NoReturn:
-        username = self._require_credentials().username
-        path = auth_failed_path(username)
+        creds = self._require_credentials()
+        path = auth_failed_path(creds.username, creds.main_url)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("login failed\n", encoding="utf-8")
-        raise SmartSchoolAuthenticationError(auth_failed_message(username))
+        raise SmartSchoolAuthenticationError(
+            auth_failed_message(creds.username, creds.main_url)
+        )
 
     def _assert_credential_target(self, url: str) -> None:
         parsed = urlparse(url)

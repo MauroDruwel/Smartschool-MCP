@@ -66,7 +66,9 @@ def test_wrong_password_posts_once(
     with pytest.raises(SmartSchoolAuthenticationError, match="niet opnieuw proberen"):
         session._do_login(_Resp())
     assert posts == ["https://school.smartschool.be/login"]
-    assert (tmp_path / ".cache" / "smartschool" / "child" / "auth_failed").exists()
+    assert (
+        tmp_path / ".cache" / "smartschool" / "school" / "child" / "auth_failed"
+    ).exists()
     with pytest.raises(SmartSchoolAuthenticationError, match="niet opnieuw proberen"):
         session._do_login(_Resp())
     assert len(posts) == 1
@@ -87,7 +89,9 @@ def test_login_query_error_posts_once_and_blocks(
     with pytest.raises(SmartSchoolAuthenticationError, match="niet opnieuw proberen"):
         session._do_login(SimpleNamespace(url="https://school.smartschool.be/login"))
     assert posts == ["https://school.smartschool.be/login"]
-    assert (tmp_path / ".cache" / "smartschool" / "child" / "auth_failed").exists()
+    assert (
+        tmp_path / ".cache" / "smartschool" / "school" / "child" / "auth_failed"
+    ).exists()
     with pytest.raises(SmartSchoolAuthenticationError, match="niet opnieuw proberen"):
         session._do_login(SimpleNamespace(url="https://school.smartschool.be/login"))
     assert len(posts) == 1
@@ -108,7 +112,9 @@ def test_wrong_host_does_not_post(
     with pytest.raises(SmartSchoolAuthenticationError, match="not posted"):
         session._do_login(SimpleNamespace(url="https://evil.example/login"))
     assert called == []
-    assert not (tmp_path / ".cache" / "smartschool" / "child" / "auth_failed").exists()
+    assert not (
+        tmp_path / ".cache" / "smartschool" / "school" / "child" / "auth_failed"
+    ).exists()
 
 
 def test_verification_that_stays_on_account_page_blocks(
@@ -125,7 +131,9 @@ def test_verification_that_stays_on_account_page_blocks(
         session._do_login_verification(
             SimpleNamespace(url="https://school.smartschool.be/account-verification")
         )
-    assert (tmp_path / ".cache" / "smartschool" / "child" / "auth_failed").exists()
+    assert (
+        tmp_path / ".cache" / "smartschool" / "school" / "child" / "auth_failed"
+    ).exists()
 
 
 def test_password_post_may_continue_to_verification(
@@ -142,14 +150,16 @@ def test_password_post_may_continue_to_verification(
         SimpleNamespace(url="https://school.smartschool.be/login")
     )
     assert str(posted.url).endswith("/account-verification")
-    assert not (tmp_path / ".cache" / "smartschool" / "child" / "auth_failed").exists()
+    assert not (
+        tmp_path / ".cache" / "smartschool" / "school" / "child" / "auth_failed"
+    ).exists()
 
 
 def test_request_refuses_existing_auth_failed_without_http(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    failed = tmp_path / ".cache" / "smartschool" / "child" / "auth_failed"
+    failed = tmp_path / ".cache" / "smartschool" / "school" / "child" / "auth_failed"
     failed.parent.mkdir(parents=True)
     failed.write_text("login failed\n", encoding="utf-8")
     called: list[str] = []
@@ -211,7 +221,7 @@ def test_open_env_session_blocked_by_auth_failed(
     monkeypatch.setenv("SMARTSCHOOL_PASSWORD", "secret")
     monkeypatch.setenv("SMARTSCHOOL_MFA", "2014-01-02")
     monkeypatch.setenv("SMARTSCHOOL_MAIN_URL", "dering.smartschool.be")
-    failed = tmp_path / ".cache" / "smartschool" / "child" / "auth_failed"
+    failed = tmp_path / ".cache" / "smartschool" / "dering" / "child" / "auth_failed"
     failed.parent.mkdir(parents=True)
     failed.write_text("login failed\n", encoding="utf-8")
 
@@ -228,7 +238,7 @@ def test_cached_app_session_blocked_by_auth_failed(
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     server._session_cache.clear()
-    failed = tmp_path / ".cache" / "smartschool" / "child" / "auth_failed"
+    failed = tmp_path / ".cache" / "smartschool" / "school" / "child" / "auth_failed"
     failed.parent.mkdir(parents=True)
     failed.write_text("login failed\n", encoding="utf-8")
 
@@ -242,8 +252,17 @@ def test_cached_app_session_blocked_by_auth_failed(
         )
 
 
-def test_server_instructions_name_the_child(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("SMARTSCHOOL_CHILD_NAME", raising=False)
+def test_server_instructions_name_the_child(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    for key in (
+        "SMARTSCHOOL_CHILD",
+        "SMARTSCHOOL_CHILD_NAME",
+        "SMARTSCHOOL_PROFILE",
+        "GROK_PLUGIN_DATA",
+    ):
+        monkeypatch.delenv(key, raising=False)
     assert server._server_instructions() is None
     monkeypatch.setenv("SMARTSCHOOL_CHILD_NAME", "  Emma\nJansen ")
     text = server._server_instructions()
@@ -252,6 +271,34 @@ def test_server_instructions_name_the_child(monkeypatch: pytest.MonkeyPatch) -> 
     assert "get_children" in text
     assert "switch_child" in text
     assert "auth_failed" in text
+
+
+def test_server_instructions_use_the_saved_child(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("smartschool_mcp.credentials.keychain_enabled", lambda: False)
+    for key in (
+        "SMARTSCHOOL_CHILD",
+        "SMARTSCHOOL_CHILD_NAME",
+        "SMARTSCHOOL_USERNAME",
+        "SMARTSCHOOL_USER",
+        "SMARTSCHOOL_PASSWORD",
+        "SMARTSCHOOL_PROFILE",
+        "GROK_PLUGIN_DATA",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    from smartschool_mcp.credentials import save_credentials
+
+    save_credentials("student", "pw-secret", "depass", "2014-01-02", "Elliot")
+    text = server._server_instructions()
+    assert text is not None
+    assert "Elliot" in text
+    monkeypatch.setenv("SMARTSCHOOL_CHILD", "Emma")
+    named = server._server_instructions()
+    assert named is not None
+    assert "Emma" in named
+    assert "Elliot" not in named
 
 
 def _guard(tmp_path: Path) -> guard.GuardedSession:

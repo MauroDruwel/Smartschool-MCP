@@ -35,6 +35,7 @@ from smartschool import (
     StudentSupportLinks,
 )
 
+from smartschool_mcp.credentials import activate_saved_credentials
 from smartschool_mcp.guard import (
     GuardedSession,
     auth_failed_message,
@@ -43,13 +44,53 @@ from smartschool_mcp.guard import (
 )
 
 
-def _server_instructions() -> str | None:
-    """Tell the model which child the desktop install dialog named.
+def _named_child() -> str:
+    """Child name from the shared profile, or from an explicit env override.
 
-    ``SMARTSCHOOL_CHILD_NAME`` is optional. Credentials stay in the four
-    ``SMARTSCHOOL_*`` variables ``EnvCredentials`` already reads.
+    The Desktop bundle does not collect a second password.
+    ``activate_saved_credentials`` copies the saved child into
+    ``SMARTSCHOOL_CHILD``. Instructions are built at import, before that
+    copy, so a single saved profile is read here as well.
+    ``SMARTSCHOOL_CHILD_NAME`` remains a process override for hosts that set it.
     """
-    child = " ".join(os.environ.get("SMARTSCHOOL_CHILD_NAME", "").split())
+    for key in ("SMARTSCHOOL_CHILD", "SMARTSCHOOL_CHILD_NAME"):
+        child = " ".join(os.environ.get(key, "").split())
+        if child:
+            return child
+    try:
+        from smartschool_mcp.credentials import (
+            child_name_list,
+            load_profiles,
+            select_profiles,
+        )
+
+        profiles = load_profiles()
+        selector = os.environ.get("SMARTSCHOOL_PROFILE", "").strip()
+        username = (
+            os.environ.get("SMARTSCHOOL_USERNAME", "").strip()
+            or os.environ.get("SMARTSCHOOL_USER", "").strip()
+        )
+        if selector:
+            profiles = select_profiles(profiles, selector)
+        elif username:
+            profiles = [
+                profile
+                for profile in profiles
+                if str(profile.get("username", "")) == username
+            ]
+    except Exception:
+        return ""
+    if len(profiles) != 1:
+        return ""
+    names = child_name_list(profiles[0])
+    if not names:
+        return ""
+    return " ".join(names[0].split())
+
+
+def _server_instructions() -> str | None:
+    """Tell the model which saved child ``switch_child`` should select."""
+    child = _named_child()
     if not child:
         return None
     return (
@@ -86,8 +127,10 @@ def _open_env_session() -> Smartschool:
             raise ValueError("Untrusted or invalid Smartschool host")
         object.__setattr__(creds, "main_url", validated)
     username = creds.username.strip()
-    if username and auth_failed_path(username).exists():
-        raise SmartSchoolAuthenticationError(auth_failed_message(username))
+    if username and auth_failed_path(username, creds.main_url).exists():
+        raise SmartSchoolAuthenticationError(
+            auth_failed_message(username, creds.main_url)
+        )
     return GuardedSession(creds)
 
 
@@ -99,6 +142,7 @@ def _env_session() -> Smartschool:
     (missing env vars, network failures) surface as tool errors rather than
     crashing the process on startup.
     """
+    activate_saved_credentials()
     return _open_env_session()
 
 
@@ -128,8 +172,10 @@ def _cached_app_session(
     validated_host = _validate_school_url(main_url)
     if not validated_host:
         raise ValueError("Untrusted or invalid Smartschool host")
-    if auth_failed_path(username).exists():
-        raise SmartSchoolAuthenticationError(auth_failed_message(username))
+    if auth_failed_path(username, validated_host).exists():
+        raise SmartSchoolAuthenticationError(
+            auth_failed_message(username, validated_host)
+        )
 
     return GuardedSession(
         AppCredentials(

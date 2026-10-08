@@ -101,6 +101,9 @@ def test_every_row_gets_a_known_decision() -> None:
 
 def test_cli_exits_when_credentials_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(smoke, "load_dotenv", lambda path: None)
+    monkeypatch.setattr(
+        "smartschool_mcp.credentials.activate_saved_credentials", lambda: None
+    )
     for key in (
         "SMARTSCHOOL_USERNAME",
         "SMARTSCHOOL_PASSWORD",

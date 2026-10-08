@@ -1,6 +1,6 @@
 # Smartschool uitproberen in Claude Desktop
 
-Dit is een test voor een ouder. Je downloadt één bestand, opent het in Claude Desktop, vult vijf velden in, en stelt daarna een paar vragen. Je hebt geen extra programma nodig.
+Dit is een test voor een ouder. Je downloadt één bestand, opent het in Claude Desktop, en stelt daarna een paar vragen. Het wachtwoord staat al in het gedeelde accountbestand op deze computer. Deze extensie vraagt het niet opnieuw en bewaart geen tweede kopie. Je hebt geen extra programma nodig.
 
 ## 1. Het bestand downloaden
 
@@ -17,26 +17,34 @@ Bewaar dat `.mcpb`-bestand ergens waar je het terugvindt, bijvoorbeeld op het bu
 ## 2. Installeren in Claude Desktop
 
 1. Dubbelklik `smartschool-mcp.mcpb`.
-2. Claude Desktop opent en toont een venster met vijf velden.
+2. Claude Desktop opent de extensie. Er is geen venster voor school, gebruikersnaam of wachtwoord.
 3. Gebeurt dat niet: open Claude Desktop, ga naar **Instellingen**, dan **Extensies**, en kies daar het `.mcpb`-bestand.
 
 De eerste keer heeft Claude internet nodig om de rest van het programma op te halen. Dat kan een minuut duren. Blijf in Claude. Er komt geen zwart venster.
 
-## 3. De velden invullen
+## 3. Het account dat Claude gebruikt
 
-| Veld | Wat je typt |
-| --- | --- |
-| School | Alleen het eerste stuk, bijvoorbeeld `dering`. Het stuk `.smartschool.be` zetten we er zelf achter. Plak je toch `https://dering.smartschool.be`, dan halen we `https://` en `.smartschool.be` eraf. |
-| Gebruikersnaam | De gebruikersnaam van het Smartschool-account. |
-| Wachtwoord | Het wachtwoord van dat account. |
-| Geboortedatum van je kind | `JJJJ-MM-DD`, bijvoorbeeld `2014-03-21`. Dat is de controle die Smartschool bij het inloggen vraagt. |
-| Naam van je kind | De voornaam, zoals je die in huis gebruikt. |
+Claude leest het bestand `credentials.json`. Dat is hetzelfde account als de andere Smartschool-hulp op deze computer. De naam van je kind staat in dat bestand. Claude kiest dat kind.
 
-Klik daarna op bevestigen. Claude onthoudt het wachtwoord en de geboortedatum versleuteld op deze computer.
+Op een Mac staat het bestand in `~/.config/smartschool/credentials.json`.
+
+1. Open Finder.
+2. Klik in de menubalk op **Ga**, dan **Ga naar map**.
+3. Plak `~/.config/smartschool` en druk op Return.
+4. Daar zie je `credentials.json`.
+
+Op Windows staat het bestand in `%USERPROFILE%\.config\smartschool\credentials.json`.
+
+1. Open Verkenner.
+2. Klik op de adresbalk.
+3. Plak `%USERPROFILE%\.config\smartschool` en druk op Enter.
+4. Daar zie je `credentials.json`.
+
+Staat dat bestand er niet, dan kan deze test nog niet inloggen. Het account moet eerst in dat bestand staan. Deze extensie maakt geen tweede wachtwoord aan.
 
 ## 4. Vragen om te stellen
 
-Wacht tot de extensie aan staat. Stel de vragen één voor één, in gewoon Nederlands. Zet de voornaam van je kind op de plaats van de naam die je invulde.
+Wacht tot de extensie aan staat. Stel de vragen één voor één, in gewoon Nederlands. Zet de voornaam van je kind op de plaats van de naam die in `credentials.json` staat.
 
 Een geslaagde test toont gegevens uit Smartschool. Een leeg antwoord kan kloppen (geen taken, geen nieuwe berichten). Een zin met `error` of `LOGIN FAILED` betekent dat de test stopte.
 
@@ -73,15 +81,15 @@ Je herkent de stop aan de zin **LOGIN FAILED, niet opnieuw proberen**, met het p
 
 Zo ga je verder:
 
-1. Verbeter het wachtwoord of de geboortedatum in Claude Desktop: **Instellingen**, **Extensies**, **Smartschool**.
-2. Gooi het bestand `auth_failed` weg. Het staat in een map op je computer. De mapnaam is de Smartschool-gebruikersnaam, niet de voornaam van je kind.
+1. Verbeter het wachtwoord of de geboortedatum in `credentials.json`. Claude heeft voor deze extensie geen wachtwoordveld.
+2. Gooi het bestand `auth_failed` weg. Het staat in een map op je computer: eerst de school (bijvoorbeeld `dering`), daarna de Smartschool-gebruikersnaam. Dat is niet de voornaam van je kind.
 
 Op een Mac:
 
 1. Open Finder.
 2. Klik in de menubalk op **Ga**, dan **Ga naar map**.
 3. Plak `~/.cache/smartschool` en druk op Return.
-4. Open de map met de gebruikersnaam.
+4. Open de map met de school, en daarna de map met de gebruikersnaam.
 5. Sleep `auth_failed` naar de prullenbak.
 
 Op Windows:
@@ -89,7 +97,7 @@ Op Windows:
 1. Open Verkenner.
 2. Klik op de adresbalk.
 3. Plak `%USERPROFILE%\.cache\smartschool` en druk op Enter.
-4. Open de map met de gebruikersnaam.
+4. Open de map met de school, en daarna de map met de gebruikersnaam.
 5. Verwijder `auth_failed`.
 
 3. Sluit Claude Desktop helemaal. Op een Mac: menu **Claude**, **Stop Claude**. Op Windows: klik met de rechtermuisknop op het Claude-icoon naast de klok en kies afsluiten. Open Claude daarna opnieuw.

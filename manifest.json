@@ -4,7 +4,7 @@
   "display_name": "Smartschool",
   "version": "0.2.0",
   "description": "Rooster, punten, taken en berichten van Smartschool voor één kind.",
-  "long_description": "Claude Desktop-extensie voor het Smartschool-portaal. Je vult bij het installeren de school, de gebruikersnaam, het wachtwoord, de geboortedatum en de naam van je kind in. De server start via uv en praat via stdio. Het Smartschool-account zelf wordt niet in een tweede config-bestand bewaard.",
+  "long_description": "Claude Desktop-extensie voor het Smartschool-portaal. De server start via uv en praat via stdio. Het account komt uit het gedeelde bestand ~/.config/smartschool/credentials.json. Deze extensie vraagt geen wachtwoord en bewaart geen tweede kopie.",
   "author": {
     "name": "Mauro Druwel",
     "email": "mauro.druwel@gmail.com",
@@ -31,12 +31,7 @@
         "smartschool_mcp"
       ],
       "env": {
-        "MCP_TRANSPORT": "stdio",
-        "SMARTSCHOOL_MAIN_URL": "${user_config.school}",
-        "SMARTSCHOOL_USERNAME": "${user_config.username}",
-        "SMARTSCHOOL_PASSWORD": "${user_config.password}",
-        "SMARTSCHOOL_MFA": "${user_config.birth_date}",
-        "SMARTSCHOOL_CHILD_NAME": "${user_config.child_name}"
+        "MCP_TRANSPORT": "stdio"
       }
     }
   },
@@ -108,40 +103,6 @@
     "platforms": ["darwin", "win32", "linux"],
     "runtimes": {
       "python": ">=3.10"
-    }
-  },
-  "user_config": {
-    "school": {
-      "type": "string",
-      "title": "School",
-      "description": "Het eerste stuk van het Smartschool-adres, bijvoorbeeld dering. .smartschool.be zetten we er zelf achter. Plak je het hele adres (ook met https://), dan halen we dat eraf.",
-      "required": true
-    },
-    "username": {
-      "type": "string",
-      "title": "Gebruikersnaam",
-      "description": "De gebruikersnaam van het Smartschool-account.",
-      "required": true
-    },
-    "password": {
-      "type": "string",
-      "title": "Wachtwoord",
-      "description": "Het wachtwoord van dat account. Claude bewaart dit versleuteld.",
-      "sensitive": true,
-      "required": true
-    },
-    "birth_date": {
-      "type": "string",
-      "title": "Geboortedatum van je kind",
-      "description": "De geboortedatum als JJJJ-MM-DD, bijvoorbeeld 2014-03-21. Smartschool vraagt die als controle bij het inloggen.",
-      "sensitive": true,
-      "required": true
-    },
-    "child_name": {
-      "type": "string",
-      "title": "Naam van je kind",
-      "description": "De voornaam, zodat Claude het juiste kind kiest als er meerdere kinderen aan het account hangen.",
-      "required": true
     }
   }
 }
