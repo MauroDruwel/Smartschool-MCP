@@ -29,10 +29,16 @@ from mcp.server.auth.provider import (
     construct_redirect_uri,
 )
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
-from smartschool import AppCredentials, Smartschool
+from smartschool import AppCredentials
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 from starlette.routing import Route
+
+from smartschool_mcp.guard import (
+    GuardedSession,
+    auth_failed_message,
+    auth_failed_path,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -547,21 +553,36 @@ async def _handle_login_post(
             mfa=mfa,
         )
 
-    # Validate credentials by attempting a Smartschool login
+    if auth_failed_path(username, school).exists():
+        return _render_login_form(
+            pending_id,
+            error=auth_failed_message(username, school),
+            school=school_raw,
+            username=username,
+            mfa=mfa,
+        )
+
+    # Validate credentials by attempting a Smartschool login.
+    # GuardedSession posts the password once, then writes auth_failed.
     creds = AppCredentials(
         username=username, password=password, main_url=school, mfa=mfa
     )
     try:
-        session = Smartschool(creds)
+        session = GuardedSession(creds)
         # Force an actual request to verify the credentials work
         session.get("/?module=Messages&file=messageOverview")
-    except Exception:
+    except Exception as exc:
         _logger.debug(
             "Smartschool login failed for user=%s school=%s", username, school
         )
+        detail = str(exc)
+        if "niet opnieuw proberen" in detail or "auth_failed" in detail:
+            error = detail
+        else:
+            error = "Login failed — check your school URL, username, and password."
         return _render_login_form(
             pending_id,
-            error="Login failed — check your school URL, username, and password.",
+            error=error,
             school=school_raw,
             username=username,
             mfa=mfa,

@@ -74,6 +74,12 @@ Single-file MCP server `smartschool_mcp/server.py` plus `smartschool_mcp/__main_
 
 Tools are `@mcp.tool()` functions on `FastMCP("Smartschool MCP")`. `_session()` is lazy (`@lru_cache(maxsize=1)` / OAuth cache); missing credentials fail at tool call, not process start. Tests patch `_session` in `conftest.py` (`autouse`); never hit the network. The opt-in portal smoke (`PORTAL_SMOKE=1`, `pytest -m integration`) is the exception and is excluded from CI.
 
+Stdio and OAuth sessions are `GuardedSession` (`smartschool_mcp/guard.py`): one credential POST, then `~/.cache/smartschool/<subdomain>/<user>/auth_failed` (the same cache as the shared credential store). `/login?error=1` is a failure. `SMARTSCHOOL_MAIN_URL` accepts a bare school subdomain (`dering` → `dering.smartschool.be`). Single-user mode calls `prepare_server_credentials()` before opening that session. A complete Configure dialog is saved once when that profile is not already stored; an existing profile wins. With no account at all, tools return a Dutch Configure message instead of the library attribute error. The child name on the saved profile is read into the server instructions for `switch_child`.
+
+Claude Desktop install: `manifest.json` (mcpb `uv`) plus `scripts/build_mcpb.py`. Optional `user_config` fields (school, username, password, birth date, child name) map to `SMARTSCHOOL_*` and are saved into `~/.config/smartschool/credentials.json` when that profile is missing. The MCPB workflow uploads `dist/smartschool-mcp.mcpb`. The bundle vendors the pinned fork so the parent install does not clone git. Parent steps: `docs/claude-desktop-test.md`.
+
+Each new test-build `.mcpb` gets the next version so Claude Desktop shows Update. `manifest.json` uses `0.3.0-rc.N`; the next test build is `0.3.0-rc.1`, then `rc.2`, and so on. `scripts/build_mcpb.py` uses the PEP 440 form `0.3.0rcN` (`uv lock` rejects `0.3.0-rc.N`). The current test artifact stays `0.3.0-test.1` until that next build. Release PRs stay on `0.2.0` unless a version bump is already part of them. Name the manifest version in `docs/claude-desktop-test.md`.
+
 Library objects are lazy (e.g. `.details` triggers HTTP). Use `getattr(..., default)` where stubs are incomplete. Tools catch `Exception` and return `{"error": ...}` (or a list variant).
 
 Helpers: `_safe_format_date`, `_safe_get_teacher_names`; `_TaskDict` / `_CourseDict` / `_DayDict` for `get_future_tasks`.
@@ -83,6 +89,6 @@ Helpers: `_safe_format_date`, `_safe_get_teacher_names`; `_TaskDict` / `_CourseD
 - `test_helpers.py` — date/teacher helpers
 - `test_middleware.py` — bearer auth
 - `test_tools.py` — tool error handling and mocked happy paths
-- plus `test_auth.py`, `test_main.py`, `test_server_session.py`
+- plus `test_auth.py`, `test_main.py`, `test_server_session.py`, `test_login_guard.py`, `test_mcpb_manifest.py`
 - `test_portal_smoke_plan.py` — catalog classifier (no network)
 - `test_portal_smoke.py` — live smoke, skipped unless `PORTAL_SMOKE=1`

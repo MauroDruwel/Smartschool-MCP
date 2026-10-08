@@ -24,16 +24,15 @@ def test_env_session_uses_lru_cache() -> None:
     srv._env_session.cache_clear()
 
     with (
-        patch("smartschool_mcp.server.activate_saved_credentials"),
-        patch("smartschool_mcp.server.EnvCredentials", return_value="env-creds"),
-        patch("smartschool_mcp.server.Smartschool", return_value="session") as mock_ss,
+        patch("smartschool_mcp.server.prepare_server_credentials"),
+        patch.object(srv, "_open_env_session", return_value="session") as mock_open,
     ):
         first = srv._env_session()
         second = srv._env_session()
 
     assert first == "session"
     assert second == "session"
-    mock_ss.assert_called_once_with("env-creds")
+    mock_open.assert_called_once_with()
 
 
 def test_env_session_reads_the_shared_store(
@@ -51,6 +50,8 @@ def test_env_session_reads_the_shared_store(
         "SMARTSCHOOL_MAIN_URL",
         "SMARTSCHOOL_MFA",
         "SMARTSCHOOL_PROFILE",
+        "SMARTSCHOOL_CHILD",
+        "SMARTSCHOOL_CHILD_NAME",
         "GROK_PLUGIN_DATA",
     ):
         monkeypatch.delenv(key, raising=False)
@@ -61,15 +62,12 @@ def test_env_session_reads_the_shared_store(
     srv._env_session.cache_clear()
     seen: dict[str, str] = {}
 
-    def _creds() -> str:
+    def _open() -> str:
         seen["user"] = os.environ["SMARTSCHOOL_USERNAME"]
         seen["child"] = os.environ["SMARTSCHOOL_CHILD"]
-        return "env-creds"
+        return "session"
 
-    with (
-        patch("smartschool_mcp.server.EnvCredentials", side_effect=_creds),
-        patch("smartschool_mcp.server.Smartschool", return_value="session"),
-    ):
+    with patch.object(srv, "_open_env_session", side_effect=_open):
         assert srv._env_session() == "session"
 
     assert seen == {"user": "student", "child": "Emma"}
@@ -85,7 +83,7 @@ def test_cached_app_session_uses_credentials_cache() -> None:
             side_effect=lambda **kwargs: kwargs,
         ) as mock_creds,
         patch(
-            "smartschool_mcp.server.Smartschool", return_value="app-session"
+            "smartschool_mcp.server.GuardedSession", return_value="app-session"
         ) as mock_ss,
     ):
         first = srv._cached_app_session("user", "pass", "school.smartschool.be", "")
