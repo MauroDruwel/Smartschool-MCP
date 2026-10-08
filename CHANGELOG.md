@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `get_schedule` uses the Planner calendar GET (`PlannedElements`, no `types` filter) instead of the removed Schoolagenda XML
+- `get_schedule` uses the Planner calendar GET (no `types` filter) instead of the removed Schoolagenda XML. The MCP reads that JSON itself so element id, description, and upload folders are not dropped by `PlannedElement`
 - `get_planned_elements` matches that calendar GET by default; optional `types` and `includes` for sidebar subsets
 - Pin `smartschool` to `markminnoye/smartschool@517de70` (`planner-calendar-1to1`) until upstream merges Planner calendar
 - Bump `smartschool` git pin so XML tools (agenda, messages, …) call `ensure_authenticated()` before the dispatcher POST (empty 200 without a login redirect)
@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `get_attachments(message_id)` — list all attachments for a message (name, mime type, size, file ID)
 - `download_attachment(message_id, file_id, save_path?)` — download an attachment; defaults to `~/Downloads/smartschool/`, accepts optional `save_path`
 - `has_attachments` and `attachment_count` fields in every `get_messages` result
+- `get_schedule` and `get_planned_elements` include planner element `id`, `description`, and `upload_folders`
+- `get_planner_attachments` / `download_planner_file` — list and download files attached to a planner item. The website `includes=upload-folders` query is sent; the JSON field names and the file download URL are **not live-verified** (fixtures at `smartschool@517de70` do not contain them). Download uses a URL from that payload only.
+- `get_course_documents` / `download_course_document` — course Documenten via `TopNavCourses` + `FolderItem` (`/Documents/Index/Index/...` and `/Documents/Download/Index/...`, both in the library fixtures)
 
 ### Removed
 
@@ -40,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Planner week fetch no longer fails when lesson payloads omit `canUserRestoreFromTrash` (`smartschool@517de70`)
 - `download_attachment` calls `session.get()` directly instead of the upstream library's `Attachment.download()`, which incorrectly base64-decodes a raw binary response (upstream bug)
 - Homepage HTML parsing falls back to BeautifulSoup when `smartschool.bs4_html` is present but cannot parse the response
+- `get_results` no longer fails the whole call when `graphic.percentage.color` is `blue` or another value outside the library enum (`green`, `red`, `olive`, `yellow`, `steel`, `grass`). Known colors stay enum members; unknown colors are kept as strings. The fork pin stays at `517de70` because this environment cannot push to `markminnoye/smartschool`.
+- `get_future_tasks` falls back to Planner `planned-assignments` (today through the next 366 days) when the legacy Agenda list is empty or unavailable, and keeps the date/course/task shape. De Pass stores Toets and Huistaak on the Planner calendar, not in `/Agenda/Futuretasks/getFuturetasks`.
 
 ## [0.2.0] - 2026-03-25
 
