@@ -35,7 +35,13 @@ from smartschool import (
     StudentSupportLinks,
 )
 
-from smartschool_mcp.credentials import activate_saved_credentials
+from smartschool_mcp.credentials import (
+    NO_DESKTOP_CREDENTIALS,
+    CredentialMixError,
+    CredentialStoreError,
+    MissingCredentialsError,
+    prepare_server_credentials,
+)
 from smartschool_mcp.guard import (
     GuardedSession,
     auth_failed_message,
@@ -110,6 +116,18 @@ class AuthenticationError(RuntimeError):
     """Authentication state is present but credentials are no longer valid."""
 
 
+def _tool_error(exc: Exception, prefix: str) -> str:
+    """Parent-facing credential errors stay Dutch. Other failures keep the prefix."""
+    if isinstance(
+        exc, (MissingCredentialsError, CredentialStoreError, CredentialMixError)
+    ):
+        return str(exc)
+    text = str(exc)
+    if "Please verify and correct these attributes" in text:
+        return NO_DESKTOP_CREDENTIALS
+    return f"{prefix}: {text}"
+
+
 def _open_env_session() -> Smartschool:
     """Env-var session with a normalised school host and the login lockout.
 
@@ -142,7 +160,7 @@ def _env_session() -> Smartschool:
     (missing env vars, network failures) surface as tool errors rather than
     crashing the process on startup.
     """
-    activate_saved_credentials()
+    prepare_server_credentials()
     return _open_env_session()
 
 
@@ -782,7 +800,7 @@ def get_courses() -> list[dict[str, Any]]:
         return courses_list
 
     except Exception as e:
-        return [{"error": f"Failed to retrieve courses: {e!s}"}]
+        return [{"error": _tool_error(e, "Failed to retrieve courses")}]
 
 
 @mcp.tool()
@@ -898,7 +916,7 @@ def get_results(
         }
 
     except Exception as e:
-        return {"error": f"Failed to retrieve results: {e!s}"}
+        return {"error": _tool_error(e, "Failed to retrieve results")}
 
 
 class _TaskDict(TypedDict):
@@ -970,7 +988,7 @@ def get_future_tasks() -> dict[str, Any]:
         }
 
     except Exception as e:
-        return {"error": f"Failed to retrieve future tasks: {e!s}"}
+        return {"error": _tool_error(e, "Failed to retrieve future tasks")}
 
 
 @mcp.tool()
@@ -1105,7 +1123,7 @@ def get_messages(
         }
 
     except Exception as e:
-        return {"error": f"Failed to retrieve messages: {e!s}"}
+        return {"error": _tool_error(e, "Failed to retrieve messages")}
 
 
 @mcp.tool()
@@ -1145,7 +1163,7 @@ def get_schedule(date_offset: int = 0, includes: str | None = None) -> dict[str,
         }
 
     except Exception as e:
-        return {"error": f"Failed to retrieve schedule: {e!s}"}
+        return {"error": _tool_error(e, "Failed to retrieve schedule")}
 
 
 @mcp.tool()
@@ -1177,7 +1195,7 @@ def get_periods() -> list[dict[str, Any]]:
         return periods_list
 
     except Exception as e:
-        return [{"error": f"Failed to retrieve periods: {e!s}"}]
+        return [{"error": _tool_error(e, "Failed to retrieve periods")}]
 
 
 @mcp.tool()
@@ -1204,7 +1222,7 @@ def get_reports() -> list[dict[str, Any]]:
         return reports_list
 
     except Exception as e:
-        return [{"error": f"Failed to retrieve reports: {e!s}"}]
+        return [{"error": _tool_error(e, "Failed to retrieve reports")}]
 
 
 @mcp.tool()
@@ -1261,7 +1279,7 @@ def get_planned_elements(
         }
 
     except Exception as e:
-        return {"error": f"Failed to retrieve planned elements: {e!s}"}
+        return {"error": _tool_error(e, "Failed to retrieve planned elements")}
 
 
 @mcp.tool()
@@ -1288,7 +1306,7 @@ def get_student_support_links() -> list[dict[str, Any]]:
         return links_list
 
     except Exception as e:
-        return [{"error": f"Failed to retrieve support links: {e!s}"}]
+        return [{"error": _tool_error(e, "Failed to retrieve support links")}]
 
 
 @mcp.tool()
@@ -1337,7 +1355,7 @@ def get_children() -> dict[str, Any]:
             "total": len(children),
         }
     except Exception as e:
-        return {"error": f"Failed to retrieve children: {e!s}"}
+        return {"error": _tool_error(e, "Failed to retrieve children")}
 
 
 @mcp.tool()
@@ -1424,7 +1442,7 @@ def switch_child(account_id: str) -> dict[str, Any]:
             result["switched_host"] = switched_host
         return result
     except Exception as e:
-        return {"error": f"Failed to switch child: {e!s}"}
+        return {"error": _tool_error(e, "Failed to switch child")}
 
 
 def _attachment_file_id(att: object) -> object | None:
@@ -1472,7 +1490,7 @@ def get_attachments(message_id: int) -> dict[str, Any]:
             "total": len(attachments_list),
         }
     except Exception as e:
-        return {"error": f"Failed to retrieve attachments: {e!s}"}
+        return {"error": _tool_error(e, "Failed to retrieve attachments")}
 
 
 @mcp.tool()
@@ -1550,7 +1568,7 @@ def download_attachment(
         }
 
     except Exception as e:
-        return {"error": f"Failed to download attachment: {e!s}"}
+        return {"error": _tool_error(e, "Failed to download attachment")}
 
 
 def _parse_html(response: Any) -> Any:
@@ -1640,7 +1658,7 @@ def get_homepage_blocks(include_html: bool = False) -> dict[str, Any]:
         return {"blocks": blocks, "total": len(blocks)}
 
     except Exception as e:
-        return {"error": f"Failed to retrieve homepage blocks: {e!s}"}
+        return {"error": _tool_error(e, "Failed to retrieve homepage blocks")}
 
 
 @mcp.tool()
@@ -1699,4 +1717,4 @@ def download_homepage_image(
         }
 
     except Exception as e:
-        return {"error": f"Failed to download image: {e!s}"}
+        return {"error": _tool_error(e, "Failed to download image")}
