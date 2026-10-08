@@ -34,10 +34,7 @@ from smartschool import (
     StudentSupportLinks,
 )
 
-from smartschool_mcp.graphic_color import relax_graphic_colors
-
-# Known GraphicColor members reject De Pass "blue" (and any later new color).
-relax_graphic_colors()
+from smartschool_mcp.credentials import activate_saved_credentials
 
 # MCP server - tools are registered via @mcp.tool() decorators below
 mcp = FastMCP("Smartschool MCP")
@@ -55,6 +52,7 @@ def _env_session() -> Smartschool:
     (missing env vars, network failures) surface as tool errors rather than
     crashing the process on startup.
     """
+    activate_saved_credentials()
     return Smartschool(EnvCredentials())
 
 
@@ -691,6 +689,20 @@ def get_courses() -> list[dict[str, Any]]:
 
     except Exception as e:
         return [{"error": f"Failed to retrieve courses: {e!s}"}]
+
+
+def _install_lenient_grade_colors() -> None:
+    """Accept grade colors the pinned library enum does not list.
+
+    De Pass sends ``blue``. This runs at import so ``PercentageGraphic``
+    validation in this process accepts that color before ``get_results``.
+    """
+    from smartschool_mcp.graphic_color import relax_graphic_colors
+
+    relax_graphic_colors()
+
+
+_install_lenient_grade_colors()
 
 
 @mcp.tool()

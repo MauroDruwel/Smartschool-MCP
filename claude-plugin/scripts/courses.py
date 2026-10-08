@@ -8,27 +8,38 @@ from typing import Any
 
 from smartschool import Courses
 
-from _common import main, open_session, teacher_names
+from _common import (
+    add_profile_argument,
+    combine_profiles,
+    main,
+    open_sessions,
+    teacher_names,
+    use_profile_argument,
+)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="List courses and teachers for the configured account."
-    )
+    parser = argparse.ArgumentParser(description="List Smartschool courses.")
+    add_profile_argument(parser)
     return parser.parse_args(argv)
 
 
 def build(argv: list[str] | None = None) -> dict[str, Any]:
-    parse_args(argv)
-    rows = []
-    for course in Courses(open_session()):
-        rows.append(
-            {
-                "name": getattr(course, "name", "") or "",
-                "teachers": teacher_names(getattr(course, "teachers", None)),
-            }
-        )
-    return {"courses": rows, "total": len(rows)}
+    args = parse_args(argv)
+    use_profile_argument(args)
+
+    def fetch(session: object) -> dict[str, Any]:
+        rows = []
+        for course in Courses(session):  # type: ignore[arg-type]
+            rows.append(
+                {
+                    "name": getattr(course, "name", "") or "",
+                    "teachers": teacher_names(getattr(course, "teachers", None)),
+                }
+            )
+        return {"courses": rows, "total": len(rows)}
+
+    return combine_profiles(open_sessions(), fetch)
 
 
 if __name__ == "__main__":

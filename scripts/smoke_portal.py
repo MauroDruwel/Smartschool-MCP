@@ -757,10 +757,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    load_dotenv(REPO_ROOT / ".env")
+    from smartschool_mcp.credentials import activate_saved_credentials
+
+    activate_saved_credentials()
     if missing_credentials():
         print(
-            "Missing SMARTSCHOOL_USERNAME / PASSWORD / MAIN_URL (set env or .env).",
+            "Missing SMARTSCHOOL_USERNAME / PASSWORD / MAIN_URL "
+            "(shared ~/.config/smartschool/credentials.json, or the environment).",
             file=sys.stderr,
         )
         return 2
