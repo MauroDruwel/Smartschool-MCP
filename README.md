@@ -38,6 +38,12 @@ Connect Claude (and other MCP clients) to your Smartschool account — ask about
 | `get_homepage_blocks` | "In de kijker" blocks pinned to the homepage (e.g. monthly menu, calendar) |
 | `download_homepage_image` | Download an image embedded in a homepage block |
 
+## Claude Desktop extension
+
+Parents install a one-click `.mcpb` from the **MCPB** GitHub Actions artifact (`smartschool-mcp-mcpb`). The Dutch steps, test questions, and login-lockout reset are in [`docs/claude-desktop-test.md`](docs/claude-desktop-test.md).
+
+The bundle vendors `markminnoye/smartschool` at `517de70` and starts the existing stdio server with `uv`. It does not ask for a school, username, or password. The server reads the shared account file from the quick start below (`~/.config/smartschool/credentials.json`, or `$GROK_PLUGIN_DATA/credentials.json`). The child name saved on that profile is what `get_children` / `switch_child` should select. A failed login writes `~/.cache/smartschool/<subdomain>/<user>/auth_failed` after one password POST — the same marker as the Claude plugin.
+
 ## Quick start — Claude Desktop
 
 Save the account once in `~/.config/smartschool/credentials.json` (the same file the Claude plugin and Grok plugin use). The server reads it when the process has no `SMARTSCHOOL_USERNAME` and `SMARTSCHOOL_PASSWORD`. Set `GROK_PLUGIN_DATA` to store that file in another directory. `SMARTSCHOOL_PROFILE` picks one login when several are saved. Each profile's `children` list stores a name and, when known, the `account_id` and `platform` returned by `get_children`.

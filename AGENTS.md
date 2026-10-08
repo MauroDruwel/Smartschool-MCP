@@ -47,7 +47,7 @@ The old **Schoolagenda** module is gone as a product (read-only from 2022, remov
 | MCP tool | Library call | Portal endpoint (approx.) | Matches the website timetable? |
 |----------|----------------|---------------------------|--------------------------------|
 | `get_schedule` | calendar JSON (same query as `PlannedElements`, one day, no `types`) | `GET /planner/api/v1/planned-elements/user/{id}?from=&to=` | **Yes** — same calendar GET as the website. Also returns `id`, `description`, and `upload_folders` when the JSON has them |
-| `get_future_tasks` | `FutureTasks` | Legacy `/Agenda/Futuretasks/getFuturetasks` | Old Agenda, not Planner |
+| `get_future_tasks` | `FutureTasks`, then `PlannedElements` (`types=planned-assignments`) when that list is empty | Legacy `/Agenda/Futuretasks/getFuturetasks`, else Planner calendar | Planner fallback on schools where Agenda is empty |
 | `get_planned_elements` | calendar JSON (same query as `PlannedElements`) | Same path; optional `types` / `includes` (default: omit `types`) | **Yes** — default matches the calendar; pass `types` for sidebar subsets |
 | `get_planner_attachments` / `download_planner_file` | calendar JSON with `includes=icon,courses,locations,upload-folders,labels`; assignment detail only as fallback | `GET /planner/api/v1/planned-elements/user/{id}` and, if needed, `GET /planner/api/v1/planned-assignments/{platformId}/{assignmentId}` | Include list matches the website. **Response body for upload folders and assignment detail is not live-verified.** Download uses a URL from that payload only |
 | `get_course_documents` / `download_course_document` | `TopNavCourses` + `FolderItem` | `GET /Documents/Index/Index/courseID/{courseId}/ssID/{platformId}` and `GET /Documents/Download/Index/...` | Documenten in the lesson module. Not planner upload folders |
@@ -55,7 +55,7 @@ The old **Schoolagenda** module is gone as a product (read-only from 2022, remov
 | `switch_child` | `GET /Studentcard/Chain/gotourl/accountID/{accountId}` | Mijn kinderen switch | After switch, Planner/results follow that child |
 | Other tools | Courses, Results, Messages, … | Other portal JSON/HTML routes | Unrelated to the timetable gap |
 
-So: we follow the **website’s portal stack**, not the official developers API. `get_schedule` and `get_planned_elements` both call the Planner calendar GET. `get_future_tasks` is still the old Agenda sidebar.
+So: we follow the **website’s portal stack**, not the official developers API. `get_schedule` and `get_planned_elements` both call the Planner calendar GET. `get_future_tasks` still tries the old Agenda sidebar first, and uses Planner `planned-assignments` when that list is empty.
 
 When changing planner tools: mirror the website query (`from`, `to`, optional `types`, optional `includes`) and pass through `plannedElementType` / `period` fields rather than reshaping them into old Agenda names.
 
@@ -76,6 +76,10 @@ MCP server `smartschool_mcp/server.py` plus `smartschool_mcp/planner_fields.py` 
 
 Tools are `@mcp.tool()` functions on `FastMCP("Smartschool MCP")`. `_session()` is lazy (`@lru_cache(maxsize=1)` / OAuth cache); missing credentials fail at tool call, not process start. Tests patch `_session` in `conftest.py` (`autouse`); never hit the network. The opt-in portal smoke (`PORTAL_SMOKE=1`, `pytest -m integration`) is the exception and is excluded from CI.
 
+Stdio and OAuth sessions are `GuardedSession` (`smartschool_mcp/guard.py`): one credential POST, then `~/.cache/smartschool/<subdomain>/<user>/auth_failed` (the same cache as the shared credential store). `/login?error=1` is a failure. `SMARTSCHOOL_MAIN_URL` accepts a bare school subdomain (`dering` → `dering.smartschool.be`). Single-user mode calls `activate_saved_credentials()` before opening that session. The child name on the saved profile is read into the server instructions for `switch_child`.
+
+Claude Desktop install: `manifest.json` (mcpb `uv`) plus `scripts/build_mcpb.py`. The bundle does not collect a second password; it uses `~/.config/smartschool/credentials.json`. The MCPB workflow uploads `dist/smartschool-mcp.mcpb`. The bundle vendors the pinned fork so the parent install does not clone git. Parent steps: `docs/claude-desktop-test.md`.
+
 Library objects are lazy (e.g. `.details` triggers HTTP). Use `getattr(..., default)` where stubs are incomplete. Tools catch `Exception` and return `{"error": ...}` (or a list variant).
 
 Helpers: `_safe_format_date`, `_safe_get_teacher_names`; `_TaskDict` / `_CourseDict` / `_DayDict` for `get_future_tasks`.
@@ -85,6 +89,6 @@ Helpers: `_safe_format_date`, `_safe_get_teacher_names`; `_TaskDict` / `_CourseD
 - `test_helpers.py` — date/teacher helpers
 - `test_middleware.py` — bearer auth
 - `test_tools.py` — tool error handling and mocked happy paths
-- plus `test_auth.py`, `test_main.py`, `test_server_session.py`
+- plus `test_auth.py`, `test_main.py`, `test_server_session.py`, `test_login_guard.py`, `test_mcpb_manifest.py`
 - `test_portal_smoke_plan.py` — catalog classifier (no network)
 - `test_portal_smoke.py` — live smoke, skipped unless `PORTAL_SMOKE=1`

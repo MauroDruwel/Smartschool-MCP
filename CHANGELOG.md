@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Claude Desktop `.mcpb` bundle (`manifest.json`, `scripts/build_mcpb.py`, MCPB workflow artifact). The bundle starts the stdio server against the shared account file `~/.config/smartschool/credentials.json` and does not collect a second password. The bundle vendors `markminnoye/smartschool` at `517de70`.
+- Dutch parent test guide: `docs/claude-desktop-test.md`
 - `get_children` — list linked children on Mijn kinderen (`POST /Studentcard/Student/getStudents` with XHR headers; topnav gotourl fills the current child's switch id when `accountID` is 0)
 - `switch_child(account_id)` — switch the session to another linked child (`GET /Studentcard/Chain/gotourl/accountID/{accountId}`); Planner/results then follow that child. Cross-school hops (De Ring `/otp/...`) are followed without replaying the original host.
 - Shared Smartschool account file `~/.config/smartschool/credentials.json` (or `$GROK_PLUGIN_DATA/credentials.json`) for the MCP server, the Claude plugin, and the Grok plugin path. Each profile's `children` list keeps `name` and, when known, the `account_id` and `platform` from `get_children`. Legacy `config.env` and `.env` accounts are copied in once when that file is missing
@@ -35,11 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- MCP server login uses the same one-try guard as the Claude plugin: one credential POST, then `~/.cache/smartschool/<subdomain>/<user>/auth_failed`. `/login?error=1` counts as failure. A later call does not send the password again.
 - `switch_child` follows the live Mijn kinderen chain from HAR: gotourl → `/otp/{token}` → relative `/Studentcard`. Foreign hops use a raw GET with browser navigation headers so the library cannot POST this account's password on `/login`. Cross-school `account-verification` may still run on a new device; TOTP stays blocked.
 - Claude Code plugin: an empty course list or empty body is not a login lockout; `/login?error=1` still writes `auth_failed`; a leading `https://` on `SMARTSCHOOL_MAIN_URL` is stripped; an expired message session exits with an error instead of an empty inbox; grade detail lookups re-raise authentication errors
 - Planner week fetch no longer fails when lesson payloads omit `canUserRestoreFromTrash` (`smartschool@517de70`)
 - `download_attachment` calls `session.get()` directly instead of the upstream library's `Attachment.download()`, which incorrectly base64-decodes a raw binary response (upstream bug)
 - Homepage HTML parsing falls back to BeautifulSoup when `smartschool.bs4_html` is present but cannot parse the response
+- `get_results` no longer fails the whole call when `graphic.percentage.color` is `blue` or another value outside the library enum (`green`, `red`, `olive`, `yellow`, `steel`, `grass`). Known colors stay enum members; unknown colors are kept as strings. The fork pin stays at `517de70` because this environment cannot push to `markminnoye/smartschool`.
+- `get_future_tasks` falls back to Planner `planned-assignments` (today through the next 366 days) when the legacy Agenda list is empty or unavailable, and keeps the date/course/task shape. De Pass stores Toets and Huistaak on the Planner calendar, not in `/Agenda/Futuretasks/getFuturetasks`.
 
 ## [0.2.0] - 2026-03-25
 

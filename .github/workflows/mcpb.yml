@@ -1,0 +1,39 @@
+name: MCPB
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pack:
+    name: Pack .mcpb
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install mcpb CLI
+        run: npm install -g @anthropic-ai/mcpb@2.1.2
+
+      - name: Build the Claude Desktop bundle
+        run: python3 scripts/build_mcpb.py
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: smartschool-mcp-mcpb
+          path: dist/smartschool-mcp.mcpb
+          if-no-files-found: error

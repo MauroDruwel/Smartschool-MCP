@@ -1,0 +1,124 @@
+{
+  "manifest_version": "0.4",
+  "name": "smartschool-mcp",
+  "display_name": "Smartschool",
+  "version": "0.2.0",
+  "description": "Rooster, punten, taken en berichten van Smartschool voor één kind.",
+  "long_description": "Claude Desktop-extensie voor het Smartschool-portaal. De server start via uv en praat via stdio. Het account komt uit het gedeelde bestand ~/.config/smartschool/credentials.json. Deze extensie vraagt geen wachtwoord en bewaart geen tweede kopie.",
+  "author": {
+    "name": "Mauro Druwel",
+    "email": "mauro.druwel@gmail.com",
+    "url": "https://github.com/MauroDruwel/Smartschool-MCP"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MauroDruwel/Smartschool-MCP"
+  },
+  "homepage": "https://github.com/MauroDruwel/Smartschool-MCP",
+  "documentation": "https://github.com/MauroDruwel/Smartschool-MCP/blob/main/docs/claude-desktop-test.md",
+  "support": "https://github.com/MauroDruwel/Smartschool-MCP/issues",
+  "server": {
+    "type": "uv",
+    "entry_point": "smartschool_mcp/__main__.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${__dirname}",
+        "python",
+        "-m",
+        "smartschool_mcp"
+      ],
+      "env": {
+        "MCP_TRANSPORT": "stdio"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "get_courses",
+      "description": "Vakken met leerkrachten"
+    },
+    {
+      "name": "get_course_documents",
+      "description": "Documenten bij een vak"
+    },
+    {
+      "name": "download_course_document",
+      "description": "Download een document bij een vak"
+    },
+    {
+      "name": "get_results",
+      "description": "Punten"
+    },
+    {
+      "name": "get_future_tasks",
+      "description": "Taken die nog moeten"
+    },
+    {
+      "name": "get_messages",
+      "description": "Berichten"
+    },
+    {
+      "name": "get_schedule",
+      "description": "Rooster van één dag"
+    },
+    {
+      "name": "get_periods",
+      "description": "Periodes van het schooljaar"
+    },
+    {
+      "name": "get_reports",
+      "description": "Rapporten"
+    },
+    {
+      "name": "get_planned_elements",
+      "description": "Planner over meerdere dagen"
+    },
+    {
+      "name": "get_planner_attachments",
+      "description": "Bijlagen bij een planneritem"
+    },
+    {
+      "name": "download_planner_file",
+      "description": "Download een plannerbijlage"
+    },
+    {
+      "name": "get_student_support_links",
+      "description": "Links voor leerlingenbegeleiding"
+    },
+    {
+      "name": "get_children",
+      "description": "Kinderen op Mijn kinderen"
+    },
+    {
+      "name": "switch_child",
+      "description": "Wissel naar een gekoppeld kind"
+    },
+    {
+      "name": "get_attachments",
+      "description": "Bijlagen bij een bericht"
+    },
+    {
+      "name": "download_attachment",
+      "description": "Download een bijlage"
+    },
+    {
+      "name": "get_homepage_blocks",
+      "description": "Blokken in de kijker op de startpagina"
+    },
+    {
+      "name": "download_homepage_image",
+      "description": "Download een foto uit een startpaginablok"
+    }
+  ],
+  "keywords": ["smartschool", "school", "planner", "cijfers"],
+  "license": "MIT",
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "python": ">=3.10"
+    }
+  }
+}
