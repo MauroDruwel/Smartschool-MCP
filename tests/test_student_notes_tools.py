@@ -238,7 +238,7 @@ def test_get_student_notes_include_details_uses_library_details_class() -> None:
     assert details["text"] == "Synthetische tekst"
     assert "<" not in details["text"]
     assert details["attachments"] == [{"name": "voorbeeld.pdf"}]
-    assert details["measure"] is None
+    assert not details["measure"]  # empty string (newer library) or None
     assert details["fields"] == {"Leerkracht": "Andere Leerkracht"}
     assert "details_error" not in result["notes"][0]
     assert result["filters"]["details_failed"] == 0
