@@ -20,6 +20,8 @@ EXPECTED_TOOLS = [
     "get_reports",
     "get_planned_elements",
     "get_student_support_links",
+    "get_student_notes",
+    "get_student_absences",
     "get_homepage_blocks",
     "download_homepage_image",
 ]

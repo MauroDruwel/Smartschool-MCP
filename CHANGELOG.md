@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `get_student_notes(limit?, offset?, category?, since?, include_details?)` — student file notes ("dossierlijnen", Leerlingvolgsysteem); confidential notes are never returned, details (plain text for announcements) only on request
+- `get_student_absences(since?)` — absences recorded in the Leerlingvolgsysteem
+
 ## [0.3.0] - 2026-09-22
 
 ### Added

@@ -30,6 +30,9 @@ from smartschool import (
     Results,
     Smartschool,
     SmartschoolLessons,
+    StudentAbsences,
+    StudentNoteDetails,
+    StudentNotes,
     StudentSupportLinks,
 )
 
@@ -745,6 +748,185 @@ def get_student_support_links() -> list[dict[str, Any]]:
 
     except Exception as e:
         return [{"error": f"Failed to retrieve support links: {e!s}"}]
+
+
+def _parse_since(since: str | None) -> date | None:
+    """Parse an ISO ``YYYY-MM-DD`` string; raise ``ValueError`` if malformed."""
+    if not since:
+        return None
+    try:
+        return date.fromisoformat(since)
+    except ValueError:
+        raise ValueError(f"since must be YYYY-MM-DD, got {since!r}") from None
+
+
+# With include_details every returned note costs one extra request.
+_MAX_NOTES_WITH_DETAILS = 50
+
+
+@mcp.tool()
+def get_student_notes(
+    limit: int = 15,
+    offset: int = 0,
+    category: str | None = None,
+    since: str | None = None,
+    include_details: bool = False,
+) -> dict[str, Any]:
+    """
+    Retrieve student file notes ("dossierlijnen") from the pupil-tracking
+    system (Leerlingvolgsysteem / LVS), newest first.
+
+    Notes marked confidential (private) by the school are never returned; only
+    their number is reported under ``filters.private_hidden``.
+
+    Args:
+        limit: Maximum number of notes to return (default: 15, minimum 0).
+            With include_details the maximum is 50.
+        offset: Number of notes to skip from the beginning (default: 0)
+        category: Only notes whose category name contains this text
+            (case-insensitive), e.g. "Mededeling"
+        since: Only notes dated on or after this day, format YYYY-MM-DD
+        include_details: Also fetch the content of each returned note (one
+            extra request per note, default: False). For announcements the
+            text is returned as plain text, not HTML; ``fields`` holds the
+            other labelled values (e.g. the teacher). A note whose details
+            cannot be fetched gets ``details: null`` plus ``details_error``;
+            their number is reported under ``filters.details_failed``.
+
+    Returns:
+        Dictionary with notes list, pagination info and applied filters.
+        ``pagination.limit`` is the limit actually applied.
+
+    Examples:
+        - get_student_notes() -> Latest 15 notes (headers only)
+        - get_student_notes(category="Te laat") -> Only that category
+        - get_student_notes(since="2026-09-01", include_details=True) -> Notes
+          since 1 September, with their content
+    """
+    try:
+        since_date = _parse_since(since)
+        session = _session()
+
+        limit = max(0, limit)
+        offset = max(0, offset)
+        if include_details:
+            limit = min(limit, _MAX_NOTES_WITH_DETAILS)
+
+        visible = []
+        private_hidden = 0
+        for note in StudentNotes(session, since=since_date):
+            if note.private:
+                private_hidden += 1
+                continue
+            if category and category.lower() not in (note.cat_name or "").lower():
+                continue
+            if since_date and note.date.date() < since_date:
+                continue
+            visible.append(note)
+
+        visible.sort(key=lambda n: n.date, reverse=True)
+
+        end_index = offset + limit
+        notes_list = []
+        details_failed = 0
+        for note in visible[offset:end_index]:
+            note_data: dict[str, Any] = {
+                "id": note.item_id,
+                "category": note.cat_name,
+                "title": note.title,
+                "date": _safe_format_date(note.date),
+                "author": note.author,
+                "viewed": note.viewed,
+                "school_year": note.school_year,
+            }
+            if include_details:
+                try:
+                    detail = StudentNoteDetails(session, item_id=note.item_id).get()
+                    note_data["details"] = {
+                        "text": detail.text,
+                        "fields": detail.fields,
+                        "date": _safe_format_date(detail.date),
+                        "measure": detail.measure,
+                        "attachments": detail.attachments,
+                    }
+                except Exception as e:
+                    details_failed += 1
+                    note_data["details"] = None
+                    note_data["details_error"] = f"{type(e).__name__}: {e!s}"
+            notes_list.append(note_data)
+
+        total = len(visible)
+        filters: dict[str, Any] = {
+            "category": category,
+            "since": since,
+            "include_details": include_details,
+            "private_hidden": private_hidden,
+        }
+        if include_details:
+            filters["details_failed"] = details_failed
+            filters["max_limit_with_details"] = _MAX_NOTES_WITH_DETAILS
+        return {
+            "notes": notes_list,
+            "pagination": {
+                "limit": limit,
+                "offset": offset,
+                "total": total,
+                "returned": len(notes_list),
+                "has_more": bool(notes_list) and end_index < total,
+            },
+            "filters": filters,
+        }
+
+    except Exception as e:
+        return {"error": f"Failed to retrieve student notes: {e!s}"}
+
+
+@mcp.tool()
+def get_student_absences(since: str | None = None) -> dict[str, Any]:
+    """
+    Retrieve recorded absences from the pupil-tracking system
+    (Leerlingvolgsysteem / LVS), newest first.
+
+    Args:
+        since: Only absences on or after this day, format YYYY-MM-DD
+
+    Returns:
+        Dictionary with absences list (date, code, description, info, part of
+        day "VM"/"NM", school year) and the applied filters.
+
+    Examples:
+        - get_student_absences() -> All recorded absences
+        - get_student_absences(since="2026-09-01") -> Absences since 1 September
+    """
+    try:
+        since_date = _parse_since(since)
+
+        absences = [
+            a
+            for a in StudentAbsences(_session(), since=since_date)
+            if not (since_date and a.date < since_date)
+        ]
+        absences.sort(key=lambda a: a.date, reverse=True)
+
+        absences_list = [
+            {
+                "date": _safe_format_date(a.date),
+                "code": a.code,
+                "description": a.description,
+                "info": a.info,
+                "part_of_day": a.part_of_day,
+                "school_year": a.school_year,
+            }
+            for a in absences
+        ]
+        return {
+            "absences": absences_list,
+            "total": len(absences_list),
+            "filters": {"since": since},
+        }
+
+    except Exception as e:
+        return {"error": f"Failed to retrieve student absences: {e!s}"}
 
 
 def _attachment_file_id(att: object) -> object | None:
