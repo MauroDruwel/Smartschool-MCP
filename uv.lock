@@ -1657,14 +1657,18 @@ wheels = [
 
 [[package]]
 name = "smartschool"
-version = "0.7.0"
-source = { git = "https://github.com/svaningelgem/smartschool.git#40f79bf2874f41f594477af582a6f29923b302a7" }
+version = "0.12.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bs4" },
     { name = "logprise" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9f/88/b062e6a22866e50c626248a3894a3e8b13f5f6f937f148d3fd5fd205cb23/smartschool-0.12.0.tar.gz", hash = "sha256:4bfe36edb27d3762ae9eef5a5a09e3f985ae839df8cb40bfa256967b9806fa44", size = 64456, upload-time = "2026-10-13T22:06:06.861Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/19/8f/335c6a0dff24e4030a4c1a3d27a8e2769a45c25c303eb98f9f23f208a57b/smartschool-0.12.0-py3-none-any.whl", hash = "sha256:f437674a43cf927fb21f225cef8581524da2e2559f992ccba66a269a2aa835d3", size = 82330, upload-time = "2026-10-13T22:06:05.306Z" },
 ]
 
 [[package]]
@@ -1698,7 +1702,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.4.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16.6" },
-    { name = "smartschool", git = "https://github.com/svaningelgem/smartschool.git" },
+    { name = "smartschool", specifier = ">=0.12.0" },
     { name = "types-cachetools", marker = "extra == 'dev'", specifier = ">=7.0.0.20260713" },
 ]
 provides-extras = ["dev"]
