@@ -30,6 +30,7 @@ from smartschool import (
     Results,
     Smartschool,
     SmartschoolLessons,
+    SmartSchoolRequestError,
     StudentAbsences,
     StudentNoteDetails,
     StudentNotes,
@@ -501,7 +502,7 @@ def get_messages(
                     full_msg = Message(_session(), header.id).get()
                     body = (getattr(full_msg, "body", "") or "").lower()
                     if search_query.lower() in body:
-                        header._cached_message = full_msg
+                        header._cached_message = full_msg  # type: ignore[attr-defined]
                         matched.append(header)
                 except Exception:
                     continue
@@ -760,6 +761,14 @@ def _parse_since(since: str | None) -> date | None:
         raise ValueError(f"since must be YYYY-MM-DD, got {since!r}") from None
 
 
+def _lvs_unavailable(what: str, error: Exception) -> dict[str, Any]:
+    """Error dict for an account whose Smartschool rejects the LVS request."""
+    return {
+        "error": f"Failed to retrieve {what}: the student file (LVS) is not "
+        f"available for this account (Smartschool answered: {error!s})"
+    }
+
+
 # With include_details every returned note costs one extra request.
 _MAX_NOTES_WITH_DETAILS = 50
 
@@ -789,7 +798,11 @@ def get_student_notes(
         include_details: Also fetch the content of each returned note (one
             extra request per note, default: False). For announcements the
             text is returned as plain text, not HTML; ``fields`` holds the
-            other labelled values (e.g. the teacher). A note whose details
+            other labelled values (e.g. the teacher). ``details`` also holds
+            ``choice`` (the label chosen in the note's select field, e.g. the
+            measure of an order measure; "" when there is none) and
+            ``attachments`` (a list of ``{"name", "mime"}``; file contents are
+            not available). A note whose details
             cannot be fetched gets ``details: null`` plus ``details_error``;
             their number is reported under ``filters.details_failed``.
 
@@ -846,8 +859,11 @@ def get_student_notes(
                         "text": detail.text,
                         "fields": detail.fields,
                         "date": _safe_format_date(detail.date),
-                        "measure": detail.measure,
-                        "attachments": detail.attachments,
+                        "choice": detail.choice,
+                        "attachments": [
+                            {"name": a.file_name, "mime": a.file_mime}
+                            for a in detail.attachments
+                        ],
                     }
                 except Exception as e:
                     details_failed += 1
@@ -877,6 +893,8 @@ def get_student_notes(
             "filters": filters,
         }
 
+    except SmartSchoolRequestError as e:
+        return _lvs_unavailable("student notes", e)
     except Exception as e:
         return {"error": f"Failed to retrieve student notes: {e!s}"}
 
@@ -892,7 +910,8 @@ def get_student_absences(since: str | None = None) -> dict[str, Any]:
 
     Returns:
         Dictionary with absences list (date, code, description, info, part of
-        day "VM"/"NM", school year) and the applied filters.
+        day "VM"/"NM", or null when not specified; school year) and the applied
+        filters.
 
     Examples:
         - get_student_absences() -> All recorded absences
@@ -925,6 +944,8 @@ def get_student_absences(since: str | None = None) -> dict[str, Any]:
             "filters": {"since": since},
         }
 
+    except SmartSchoolRequestError as e:
+        return _lvs_unavailable("student absences", e)
     except Exception as e:
         return {"error": f"Failed to retrieve student absences: {e!s}"}
 
@@ -1057,18 +1078,13 @@ def download_attachment(
 def _parse_html(response: Any) -> Any:
     """Parse an HTML response into a BeautifulSoup tree.
 
-    ``smartschool.bs4_html`` is not exported by every release, so fall back to
-    BeautifulSoup directly rather than failing at import time.
+    ``smartschool.bs4_html`` is no longer exported (smartschool >= 0.12), so
+    use BeautifulSoup directly.
     """
+    from bs4 import BeautifulSoup
+
     raw_html = getattr(response, "text", response)
-    try:
-        from smartschool import bs4_html
-
-        return bs4_html(raw_html)
-    except (ImportError, TypeError):
-        from bs4 import BeautifulSoup
-
-        return BeautifulSoup(raw_html, "html.parser")
+    return BeautifulSoup(raw_html, "html.parser")
 
 
 def _absolutise(session: Smartschool, url: str) -> str:
