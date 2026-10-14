@@ -26,7 +26,7 @@ classifiers = [
 dependencies = [
     "cachetools>=7.1.8",
     "mcp[cli]>=2.1.1,<3",
-    "smartschool>=0.10.0",
+    "smartschool>=0.12.0",
 ]
 
 [project.optional-dependencies]
@@ -47,9 +47,6 @@ Issues = "https://github.com/MauroDruwel/Smartschool-MCP/issues"
 
 [project.scripts]
 smartschool-mcp = "smartschool_mcp.__main__:main"
-
-[tool.uv.sources]
-smartschool = { git = "https://github.com/svaningelgem/smartschool.git" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["smartschool_mcp"]
