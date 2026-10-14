@@ -1,3 +1,4 @@
+# Mauro Quality Gate Archetype: python-ci.yml
 name: CI
 
 on:
