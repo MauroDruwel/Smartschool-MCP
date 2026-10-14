@@ -11,16 +11,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-import smartschool
-
-# TEMPORARY SHIM -- REMOVE as soon as pyproject.toml / uv.lock require the
-# smartschool release that contains StudentNotes (module ``_student_notes.py``).
-# Until then the locked smartschool lacks these names, so ``smartschool_mcp.server``
-# could not be imported.  Tests that use the real library objects
-# (tests/test_student_notes_tools.py) are skipped while the shim is active.
-for _name in ("StudentNotes", "StudentAbsences", "StudentNoteDetails"):
-    if not hasattr(smartschool, _name):
-        setattr(smartschool, _name, type(_name, (), {}))
 
 
 @pytest.fixture(autouse=True)
