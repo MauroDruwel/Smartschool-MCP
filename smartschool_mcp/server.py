@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import threading
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Any, TypedDict
 from urllib.parse import urlparse
 
@@ -21,10 +23,13 @@ from smartschool import (
     BoxType,
     Courses,
     EnvCredentials,
+    FolderItem,
     FutureTasks,
+    InternetShortcut,
     Message,
     MessageHeaders,
     Periods,
+    PlannedElement,
     PlannedElements,
     Reports,
     Results,
@@ -35,7 +40,10 @@ from smartschool import (
     StudentNoteDetails,
     StudentNotes,
     StudentSupportLinks,
+    TopNavCourses,
 )
+
+from smartschool_mcp import content
 
 FastMCP = MCPServer  # Backward compatibility alias
 
@@ -318,7 +326,7 @@ def get_results(
                 result_data.update({"average": None, "median": None})
 
                 try:
-                    # details is a lazy-loaded property — fetches on first access
+                    # details is a lazy-loaded property â€” fetches on first access
                     detail = result.details
 
                     # Extract statistical information (central tendencies)
@@ -340,7 +348,7 @@ def get_results(
                             }
 
                 except Exception:
-                    # central_tendencies unavailable — keep default None values
+                    # central_tendencies unavailable â€” keep default None values
                     pass
 
             results_list.append(result_data)
@@ -381,13 +389,111 @@ class _DayDict(TypedDict):
     courses: list[_CourseDict]
 
 
+# Planner element types that make up a day's timetable: lessons with content,
+# empty timetable slots, and moments of a lesson cluster.
+_PLANNER_LESSON_TYPES = (
+    "planned-lessons",
+    "planned-placeholders",
+    "planned-lesson-cluster-moments",
+)
+_PLANNER_TASK_TYPES = ("planned-assignments", "planned-to-dos")
+
+
+def _planner_location(element: Any) -> str | None:
+    names = [
+        getattr(loc, "title", None)
+        or getattr(loc, "text", None)
+        or getattr(loc, "number", None)
+        for loc in getattr(element, "locations", None) or []
+    ]
+    return ", ".join(n for n in names if n) or None
+
+
+def _planner_organisers(element: Any) -> str | None:
+    users = getattr(getattr(element, "organisers", None), "users", None) or []
+    names = []
+    for user in users:
+        with contextlib.suppress(AttributeError):
+            names.append(user.name.starting_with_last_name)
+    return ", ".join(names) or None
+
+
+def _planner_future_tasks(session: Smartschool, days_ahead: int = 34) -> list[_DayDict]:
+    """Planner assignments and to-dos, shaped like the agenda's future tasks."""
+    days: dict[str, dict[str, list[_TaskDict]]] = {}
+    elements = PlannedElements(
+        session,
+        till_date=date.today() + timedelta(days=days_ahead),
+        element_types=_PLANNER_TASK_TYPES,
+    )
+    for element in sorted(elements, key=lambda e: e.period.date_time_from):
+        day = element.period.date_time_from.strftime("%Y-%m-%d")
+        course = ", ".join(c.name for c in element.courses) or "-"
+        label = (
+            element.assignment_type.name
+            if element.assignment_type
+            else (
+                "To-do" if element.planned_element_type == "planned-to-dos" else "N/A"
+            )
+        )
+        days.setdefault(day, {}).setdefault(course, []).append(
+            {"label": label, "description": element.name, "warning": False}
+        )
+    return [
+        {
+            "date": day,
+            "courses": [
+                {"name": name, "tasks": tasks} for name, tasks in courses.items()
+            ],
+        }
+        for day, courses in days.items()
+    ]
+
+
+def _planner_lessons(session: Smartschool, target_date: date) -> list[dict[str, Any]]:
+    """A day's timetable from the planner, in the shape of the agenda lessons."""
+    elements = PlannedElements(
+        session,
+        from_date=target_date,
+        till_date=target_date + timedelta(days=1),
+        element_types=_PLANNER_LESSON_TYPES,
+    )
+    lessons = []
+    for element in elements:
+        period = element.period
+        if period.date_time_from.date() != target_date:
+            continue
+        lessons.append(
+            {
+                "moment_id": str(element.id),
+                "date": target_date.strftime("%Y-%m-%d"),
+                "hour": f"{period.date_time_from:%H:%M}-{period.date_time_to:%H:%M}",
+                "course": ", ".join(c.name for c in element.courses) or None,
+                "classroom": _planner_location(element),
+                "teacher": _planner_organisers(element),
+                "subject": element.name or None,
+                "note": None,
+                "color": element.color,
+                "assignment_end_status": None,
+                "test_deadline_status": None,
+                "type": element.planned_element_type,
+            }
+        )
+    return sorted(lessons, key=lambda lesson: lesson["hour"])
+
+
 @mcp.tool()
 def get_future_tasks() -> dict[str, Any]:
     """
     Retrieve upcoming assignments and tasks.
 
+    Reads the agenda's future tasks; when the agenda is empty, as at schools
+    that use the planner, reads the planner's assignments and to-dos for the
+    next 34 days instead.
+
     Returns:
-        Dictionary with future tasks organized by date and course.
+        Dictionary with future tasks organized by date and course, and
+        ``source`` ("agenda" or "planner").
     """
     try:
         future_tasks = FutureTasks(_session())
@@ -423,6 +529,16 @@ def get_future_tasks() -> dict[str, Any]:
             if day_data["courses"]:
                 tasks_data.append(day_data)
 
+        source = "agenda"
+        planner_error = None
+        if not tasks_data:
+            # Schools that moved to the planner leave the old agenda empty.
+            try:
+                tasks_data = _planner_future_tasks(_session())
+                source = "planner"
+            except Exception as e:
+                planner_error = f"{e!s}"
+
         total_tasks = sum(
             len(course["tasks"]) for day in tasks_data for course in day["courses"]
         )
@@ -431,6 +547,8 @@ def get_future_tasks() -> dict[str, Any]:
             "future_tasks": tasks_data,
             "total_days": len(tasks_data),
             "total_tasks": total_tasks,
+            "source": source,
+            **({"planner_error": planner_error} if planner_error else {}),
         }
 
     except Exception as e:
@@ -477,7 +595,7 @@ def get_messages(
         except AttributeError:
             box_type_enum = BoxType.INBOX  # Default fallback
 
-        # Get message headers — headers already carry from_, subject, date, unread
+        # Get message headers â€” headers already carry from_, subject, date, unread
         all_headers = list(MessageHeaders(_session(), box_type=box_type_enum))
 
         # Apply sender filter directly from headers (no full message fetch needed)
@@ -581,8 +699,13 @@ def get_schedule(date_offset: int = 0) -> dict[str, Any]:
         date_offset: Days from today (0=today, 1=tomorrow, -1=yesterday,
             default: 0)
 
+    Reads the agenda; when it has no lessons that day, as at schools that use
+    the planner, reads the planner's lessons, timetable slots and cluster
+    moments for that day instead.
+
     Returns:
-        Dictionary with the lessons scheduled for the given date.
+        Dictionary with the lessons scheduled for the given date, and
+        ``source`` ("agenda" or "planner").
     """
     try:
         target_date = date.today() + timedelta(days=date_offset)
@@ -605,10 +728,22 @@ def get_schedule(date_offset: int = 0) -> dict[str, Any]:
                 }
             )
 
+        source = "agenda"
+        planner_error = None
+        if not lessons_list:
+            # Schools that moved to the planner leave the old agenda empty.
+            try:
+                lessons_list = _planner_lessons(_session(), target_date)
+                source = "planner"
+            except Exception as e:
+                planner_error = f"{e!s}"
+
         return {
             "date": target_date.strftime("%Y-%m-%d"),
             "lessons": lessons_list,
             "total": len(lessons_list),
+            "source": source,
+            **({"planner_error": planner_error} if planner_error else {}),
         }
 
     except Exception as e:
@@ -674,42 +809,191 @@ def get_reports() -> list[dict[str, Any]]:
         return [{"error": f"Failed to retrieve reports: {e!s}"}]
 
 
-@mcp.tool()
-def get_planned_elements(days_ahead: int = 34) -> dict[str, Any]:
+# Elements fetched with get_planned_elements, by id, so the detail tools can
+# find an element's type and platform without listing the planner again.
+_planner_index: dict[str, tuple[str, int]] = {}
+# Asked along with the planner list, so each element carries what its detail
+# page holds (description, attachments, links, to-dos) without a request each.
+# Asking for any `includes` drops the default ones, hence icon/courses/locations.
+_PLANNER_LIST_INCLUDES = ",".join(
+    (
+        "icon",
+        "courses",
+        "locations",
+        "attachments",
+        "weblinks",
+        "deeplinks",
+        "partner-weblinks",
+        "public-info",
+        "planned-to-dos",
+    )
+)
+# Upper bound on the folders a tool walks, so a large course stays quick.
+_MAX_FOLDERS = 40
+_DETAIL_KEYS = ("description", "attachments", "links", "links_without_url", "to_dos")
+
+
+def _planner_element_summary(element: Any) -> dict[str, Any]:
+    period = element.period
+    assignment_type = element.assignment_type.name if element.assignment_type else None
+    return {
+        "id": str(element.id),
+        "platform_id": element.platform_id,
+        "name": element.name,
+        "type": element.planned_element_type,
+        "type_label": content.type_label(element.planned_element_type),
+        "is_exam": content.is_exam(element.name, assignment_type),
+        "from": period.date_time_from.strftime("%Y-%m-%d %H:%M"),
+        "to": period.date_time_to.strftime("%Y-%m-%d %H:%M"),
+        "color": element.color,
+        "courses": [c.name for c in element.courses],
+        "unconfirmed": element.unconfirmed,
+        "pinned": element.pinned,
+        "assignment_type": assignment_type,
+    }
+
+
+def _planner_list(
+    session: Smartschool,
+    from_date: date,
+    till_date: date,
+    types: list[str] | None,
+) -> list[dict[str, Any]]:
     """
-    Retrieve planned assignments and to-dos from the Smartschool planner.
+    The planner elements of the logged-in user, with their content.
+
+    The same request as the library's ``PlannedElements``, plus ``includes``:
+    the library has no way to ask for them.
+    """
+    params = {
+        "from": from_date.isoformat(),
+        "to": till_date.isoformat(),
+        "includes": _PLANNER_LIST_INCLUDES,
+    }
+    if types:
+        params["types"] = ",".join(types)
+    user_id = session.authenticated_user["id"]
+    elements = session.json(
+        f"/planner/api/v1/planned-elements/user/{user_id}", data=params
+    )
+    return elements if isinstance(elements, list) else []
+
+
+def _same_test(lesson: dict[str, Any], other: dict[str, Any]) -> bool:
+    """
+    Whether *lesson* repeats the assignment *other*.
+
+    A test is often planned twice, as a lesson and as an assignment, on the
+    same day and for the same course, the assignment's name sometimes longer
+    ("... (see info)"). The assignment is the one to keep.
+    """
+    if lesson["type"] != "planned-lessons" or other["type"] == "planned-lessons":
+        return False
+    if lesson["from"][:10] != other["from"][:10]:
+        return False
+    if not set(lesson["courses"]) & set(other["courses"]):
+        return False
+    a, b = lesson["name"].strip().lower(), other["name"].strip().lower()
+    return bool(a and b) and (a.startswith(b) or b.startswith(a))
+
+
+def _planner_detail_url(element_type: str, platform_id: int, element_id: str) -> str:
+    return f"/planner/api/v1/{element_type}/{platform_id}/{element_id}"
+
+
+def _locate_planner_element(
+    session: Smartschool, element_id: str, element_type: str | None
+) -> tuple[str, int]:
+    """The type and platform of a planner element, listing the planner if needed."""
+    known = _planner_index.get(element_id)
+    if known and element_type in (None, known[0]):
+        return known
+    today = date.today()
+    for element in PlannedElements(
+        session,
+        from_date=today - timedelta(days=30),
+        till_date=today + timedelta(days=120),
+        element_types=element_type,
+    ):
+        _planner_index[str(element.id)] = (
+            element.planned_element_type,
+            element.platform_id,
+        )
+    if element_id not in _planner_index:
+        raise LookupError(
+            f"Planner element {element_id} not found between 30 days ago "
+            "and 120 days ahead"
+        )
+    return _planner_index[element_id]
+
+
+@mcp.tool()
+def get_planned_elements(
+    days_ahead: int = 34,
+    types: list[str] | None = None,
+    include_details: bool = False,
+) -> dict[str, Any]:
+    """
+    Retrieve what the Smartschool planner holds for the coming days.
+
+    By default: assignments, to-dos, events (exam periods, report days, parent
+    evenings), days off and school activities, plus the lessons that are an
+    exam or a test (``is_exam``). The rest of the timetable is left out; ask
+    for it with ``types``.
 
     Args:
         days_ahead: Number of days ahead to fetch (default: 34)
+        types: Planner types to return, e.g. ["planned-lessons"]. Known types:
+            planned-assignments, planned-to-dos, planned-lessons,
+            planned-meetings, planned-lesson-free-days,
+            planned-school-activities, planned-activities, planned-generics,
+            planned-placeholders, planned-lesson-cluster-moments.
+        include_details: Also return each element's description, attachments
+            and links (see get_planned_element_details). They come with the
+            same request; the option only makes the result longer.
 
     Returns:
-        Dictionary with planned elements including dates, courses, and assignment types.
+        Dictionary with the planned elements: id, name, type, readable
+        ``type_label``, ``is_exam``, dates, courses, assignment type, and
+        whether the element has more to show: ``has_attachments``,
+        ``has_links`` (links with an address, or Bookwidget titles without
+        one) and ``has_description`` (a description that says more than the
+        name). ``details`` holds that content when asked for.
     """
     try:
+        session = _session()
         from_date = date.today()
         till_date = from_date + timedelta(days=days_ahead)
+        base_url = session.create_url("/")
+        raw_elements = [
+            (PlannedElement(**raw), raw)
+            for raw in _planner_list(session, from_date, till_date, types)
+        ]
         elements_list = []
-
-        for element in PlannedElements(_session(), till_date=till_date):
-            period = getattr(element, "period", None)
-            element_data = {
-                "name": element.name,
-                "type": element.planned_element_type,
-                "from": (
-                    period.date_time_from.strftime("%Y-%m-%d %H:%M") if period else None
-                ),
-                "to": (
-                    period.date_time_to.strftime("%Y-%m-%d %H:%M") if period else None
-                ),
-                "color": element.color,
-                "courses": [c.name for c in element.courses] if element.courses else [],
-                "unconfirmed": element.unconfirmed,
-                "pinned": element.pinned,
-                "assignment_type": (
-                    element.assignment_type.name if element.assignment_type else None
-                ),
-            }
-            elements_list.append(element_data)
+        for element, raw in sorted(
+            raw_elements, key=lambda pair: pair[0].period.date_time_from
+        ):
+            _planner_index[str(element.id)] = (
+                element.planned_element_type,
+                element.platform_id,
+            )
+            summary = _planner_element_summary(element)
+            detail = content.planner_detail(raw, base_url)
+            summary.update(content.content_flags(detail))
+            if include_details:
+                summary["details"] = {key: detail[key] for key in _DETAIL_KEYS}
+            if not types and (
+                summary["type"] in content.EMPTY_SLOT_TYPES
+                or (summary["type"] == "planned-lessons" and not summary["is_exam"])
+            ):
+                continue
+            elements_list.append(summary)
+        if not types:
+            elements_list = [
+                s
+                for s in elements_list
+                if not any(_same_test(s, other) for other in elements_list)
+            ]
 
         return {
             "planned_elements": elements_list,
@@ -722,6 +1006,408 @@ def get_planned_elements(days_ahead: int = 34) -> dict[str, Any]:
 
     except Exception as e:
         return {"error": f"Failed to retrieve planned elements: {e!s}"}
+
+
+@mcp.tool()
+def get_planned_element_details(
+    element_id: str, element_type: str | None = None
+) -> dict[str, Any]:
+    """
+    Read one planner element in full: description, attachments and links.
+
+    Args:
+        element_id: The element's ``id`` from get_planned_elements.
+        element_type: Its ``type``; looked up when left out.
+
+    Returns:
+        The element with its description as text, ``attachments`` (id, name,
+        size; download them with download_planned_attachment), ``links``
+        (label, url, kind: weblink, partner, course_link, document or
+        description; a document link carries ``course_id`` and ``doc_id``:
+        a file for download_course_document, a folder to open as
+        ``folder_id`` with get_course_documents) and ``links_without_url``:
+        titles linked in
+        the description without an address, usually Bookwidgets to look up
+        with get_learning_path.
+    """
+    try:
+        session = _session()
+        element_type, platform_id = _locate_planner_element(
+            session, element_id, element_type
+        )
+        url = _planner_detail_url(element_type, platform_id, element_id)
+        return content.planner_detail(session.json(url), session.create_url("/"))
+    except Exception as e:
+        return {"error": f"Failed to retrieve planner element details: {e!s}"}
+
+
+def _save_download(data: bytes, name: str, save_path: str | None) -> Path:
+    """
+    Write a download under *save_path* or ~/Downloads/smartschool/.
+
+    The name is reduced to its last path component (no path traversal) and an
+    existing file is never overwritten: a counter suffix is added instead
+    (``report (1).pdf``).
+    """
+    download_dir = (
+        Path(save_path) if save_path else Path.home() / "Downloads" / "smartschool"
+    )
+    download_dir.mkdir(parents=True, exist_ok=True)
+    file_path = download_dir / (Path(name).name or "download")
+    counter = 1
+    stem = file_path.stem
+    while file_path.exists():
+        file_path = download_dir / f"{stem} ({counter}){file_path.suffix}"
+        counter += 1
+    file_path.write_bytes(data)
+    return file_path
+
+
+@mcp.tool()
+def download_planned_attachment(
+    element_id: str,
+    attachment_id: str,
+    element_type: str | None = None,
+    save_path: str | None = None,
+) -> dict[str, Any]:
+    """
+    Download an attachment of a planner element.
+
+    Files are saved to *save_path* when provided, otherwise to
+    ~/Downloads/smartschool/. Existing files are never overwritten.
+
+    Args:
+        element_id: The element's ``id`` from get_planned_elements.
+        attachment_id: The attachment's ``id`` from get_planned_element_details.
+        element_type: The element's ``type``; looked up when left out.
+        save_path: Optional directory to save the file into.
+
+    Returns:
+        Dictionary with the saved file path, name, mime type and bytes written.
+    """
+    try:
+        session = _session()
+        element_type, platform_id = _locate_planner_element(
+            session, element_id, element_type
+        )
+        url = _planner_detail_url(element_type, platform_id, element_id)
+        attachment = next(
+            (
+                a
+                for a in session.json(url).get("attachments") or []
+                if str(a.get("id")) == str(attachment_id)
+            ),
+            None,
+        )
+        if attachment is None:
+            return {
+                "error": f"Attachment {attachment_id} not found in element {element_id}"
+            }
+        resp = session.get(f"{url}/attachments/{attachment_id}/download")
+        if not resp.ok:
+            return {"error": f"Download failed: HTTP {resp.status_code}"}
+        name = attachment.get("fileName") or f"attachment_{attachment_id}"
+        file_path = _save_download(resp.content, name, save_path)
+        return {
+            "attachment_id": attachment_id,
+            "name": file_path.name,
+            "mime_type": attachment.get("mimeType"),
+            "saved_to": str(file_path),
+            "bytes_written": len(resp.content),
+        }
+    except Exception as e:
+        return {"error": f"Failed to download planner attachment: {e!s}"}
+
+
+# ── Course documents and leerpaden ────────────────────────────────────────────
+
+
+def _find_course(session: Smartschool, course: str) -> Any:
+    """A course from the top navigation, by id or by (part of) its name."""
+    courses = list(TopNavCourses(session))
+    wanted = str(course).strip()
+    if wanted.isdigit():
+        for candidate in courses:
+            if str(candidate.id) == wanted:
+                return candidate
+    matches = [c for c in courses if wanted.lower() in c.name.lower()]
+    exact = [c for c in matches if c.name.lower() == wanted.lower()]
+    if len(exact) == 1 or len(matches) == 1:
+        return (exact or matches)[0]
+    names = ", ".join(f"{c.name} (id {c.id})" for c in matches or courses)
+    raise LookupError(
+        f"{'Several' if matches else 'No'} courses match {course!r}: {names}"
+    )
+
+
+def _course_list(session: Smartschool) -> list[dict[str, Any]]:
+    return [
+        {"id": c.id, "name": c.name, "teacher": c.teacher}
+        for c in TopNavCourses(session)
+    ]
+
+
+def _document_folder(session: Smartschool, course: Any, folder_id: int | None) -> Any:
+    browse_url = None
+    if folder_id:
+        browse_url = (
+            f"/Documents/Index/Index/courseID/{course.id}"
+            f"/parentID/{folder_id}/ssID/{course.platform_id}"
+        )
+    return FolderItem(
+        session=session,
+        parent=None,
+        course=course,
+        name="(Root)",
+        browse_url=browse_url,
+    )
+
+
+def _document_entry(item: Any) -> dict[str, Any]:
+    if isinstance(item, FolderItem):
+        match = re.search(r"parentID/(\d+)", item.browse_url or "")
+        return {
+            "kind": "folder",
+            "folder_id": int(match.group(1)) if match else None,
+            "name": item.name,
+        }
+    if isinstance(item, InternetShortcut):
+        return {"kind": "link", "name": item.name, "url": item.link}
+    return {
+        "kind": "file",
+        "doc_id": item.id,
+        "name": item.name,
+        "mime_type": item.mime_type,
+        "size_kb": item.size_kb,
+        "modified": str(item.last_modified),
+    }
+
+
+@mcp.tool()
+def get_course_documents(
+    course: str | None = None, folder_id: int | None = None
+) -> dict[str, Any]:
+    """
+    List the Documenten of a course, one folder at a time.
+
+    Args:
+        course: Course id or (part of) its name. Leave out to list the courses.
+        folder_id: Folder to open (``folder_id`` of a folder entry); the
+            course's top folder when left out.
+
+    Returns:
+        The folder's entries: folders (``folder_id``), files (``doc_id``,
+        download with download_course_document) and web links (``url``).
+    """
+    try:
+        session = _session()
+        if not course:
+            return {"courses": _course_list(session)}
+        found = _find_course(session, course)
+        entries = [
+            _document_entry(item)
+            for item in _document_folder(session, found, folder_id).items
+        ]
+        return {
+            "course": {"id": found.id, "name": found.name},
+            "folder_id": folder_id,
+            "entries": entries,
+            "total": len(entries),
+        }
+    except Exception as e:
+        return {"error": f"Failed to retrieve course documents: {e!s}"}
+
+
+@mcp.tool()
+def download_course_document(
+    course: str,
+    doc_id: int,
+    folder_id: int | None = None,
+    save_path: str | None = None,
+) -> dict[str, Any]:
+    """
+    Download a file from a course's Documenten.
+
+    Files are saved to *save_path* when provided, otherwise to
+    ~/Downloads/smartschool/. Existing files are never overwritten.
+
+    Args:
+        course: Course id or (part of) its name.
+        doc_id: The file's ``doc_id`` from get_course_documents (or the
+            ``document`` of a planner link).
+        folder_id: The folder holding the file; when left out, the course's
+            folders are searched.
+        save_path: Optional directory to save the file into.
+
+    Returns:
+        Dictionary with the saved file path, name, mime type and bytes written.
+    """
+    try:
+        session = _session()
+        found = _find_course(session, course)
+        pending = [_document_folder(session, found, folder_id)]
+        visited = 0
+        while pending and visited < _MAX_FOLDERS:
+            folder = pending.pop(0)
+            visited += 1
+            for item in folder.items:
+                if isinstance(item, FolderItem):
+                    if folder_id is None:
+                        pending.append(item)
+                elif item.id == doc_id and not isinstance(item, InternetShortcut):
+                    file_path = _save_download(
+                        item.download(), item.filename, save_path
+                    )
+                    return {
+                        "doc_id": doc_id,
+                        "name": file_path.name,
+                        "mime_type": item.mime_type,
+                        "saved_to": str(file_path),
+                        "bytes_written": file_path.stat().st_size,
+                    }
+        return {"error": f"Document {doc_id} not found in {found.name}"}
+    except Exception as e:
+        return {"error": f"Failed to download course document: {e!s}"}
+
+
+def _lpaths_page(session: Smartschool, url: str) -> str | None:
+    """A leerpaden page, or None when the course has no leerpaden module."""
+    response = session.get(url)
+    if "/Lpaths/" not in response.url:
+        return None
+    return response.text
+
+
+@mcp.tool()
+def get_learning_paths(course: str | None = None) -> dict[str, Any]:
+    """
+    List the leerpaden of a course, with the folders they are kept in.
+
+    Args:
+        course: Course id or (part of) its name. Leave out to list the courses.
+
+    Returns:
+        The course's leerpaden (``id``, ``name``, folder path); open one with
+        get_learning_path.
+    """
+    try:
+        session = _session()
+        if not course:
+            return {"courses": _course_list(session)}
+        found = _find_course(session, course)
+        result: dict[str, Any] = {"course": {"id": found.id, "name": found.name}}
+        root = f"/Lpaths/Index/Index/courseID/{found.id}/ssID/{found.platform_id}"
+        page = _lpaths_page(session, root)
+        if page is None:
+            return {**result, "learning_paths": [], "note": "No leerpaden module"}
+
+        paths: list[dict[str, Any]] = []
+        pending: list[tuple[str, list[str]]] = [(page, [])]
+        seen: set[int] = set()
+        while pending and len(seen) < _MAX_FOLDERS:
+            page, trail = pending.pop(0)
+            for entry in content.parse_lpath_folder(page):
+                if entry["kind"] == "learning_path":
+                    paths.append({**entry, "folder": " / ".join(trail) or None})
+                elif entry["id"] and entry["id"] not in seen:
+                    seen.add(entry["id"])
+                    sub = _lpaths_page(
+                        session,
+                        f"/Lpaths/Index/Index/courseID/{found.id}"
+                        f"/parentID/{entry['id']}",
+                    )
+                    if sub is not None:
+                        pending.append((sub, [*trail, entry["name"]]))
+        return {**result, "learning_paths": paths, "total": len(paths)}
+    except Exception as e:
+        return {"error": f"Failed to retrieve learning paths: {e!s}"}
+
+
+def _course_exercises(session: Smartschool, course: Any) -> dict[int, dict[str, Any]]:
+    """The course's external exercises (Bookwidgets, ...), by exercise id."""
+    exercises: dict[int, dict[str, Any]] = {}
+    pending = [0]
+    seen: set[int] = set()
+    while pending and len(seen) < _MAX_FOLDERS:
+        parent = pending.pop(0)
+        seen.add(parent)
+        page = session.get(
+            f"/?module=Exercises&file=index&courseID={course.id}"
+            f"&parentID={parent}&ssID={course.platform_id}"
+        ).text
+        folders, found = content.parse_exercise_folder(page)
+        exercises.update(found)
+        pending.extend(f for f in folders if f not in seen and f not in pending)
+    return exercises
+
+
+def _weblink_url(session: Smartschool, course: Any, link_id: int) -> str | None:
+    """Where a course weblink points: Smartschool answers with a redirect."""
+    response = session.get(
+        f"/Weblinks/Showlink/Index/courseID/{course.id}"
+        f"/linkID/{link_id}/ssID/{course.platform_id}",
+        allow_redirects=False,
+    )
+    return response.headers.get("Location") if response.is_redirect else None
+
+
+@mcp.tool()
+def get_learning_path(
+    course: str, learning_path_id: int, resolve_links: bool = True
+) -> dict[str, Any]:
+    """
+    Show the content of a leerpad: its sections and steps.
+
+    Only the leerpad's overview is read; its steps are never opened, so the
+    pupil's progress is left untouched.
+
+    Args:
+        course: Course id or (part of) its name.
+        learning_path_id: The leerpad's ``id`` from get_learning_paths.
+        resolve_links: Look up the address of web links and exercises
+            (Bookwidgets, ...). One request per web link, plus a walk of the
+            course's exercises.
+
+    Returns:
+        The leerpad's name, ``progress_percent`` and sections; each step
+        has its ``module``
+        (documents, weblinks, exercises, ...), ``item_id`` (the ``doc_id`` for
+        documents), ``name``, ``done`` (finished by the pupil) and, when
+        resolved, ``url`` (and ``provider`` for exercises). An exercise's url
+        opens it in Smartschool, logged in as the pupil.
+    """
+    try:
+        session = _session()
+        found = _find_course(session, course)
+        page = _lpaths_page(
+            session,
+            f"/Lpaths/Viewlpath/Index/courseID/{found.id}/lpathID/{learning_path_id}",
+        )
+        if page is None:
+            return {"error": f"No leerpaden module in {found.name}"}
+        result = content.parse_lpath_view(page)
+        steps = [step for section in result["sections"] for step in section["steps"]]
+        if resolve_links:
+            exercises = (
+                _course_exercises(session, found)
+                if any(s["module"] == "exercises" for s in steps)
+                else {}
+            )
+            for step in steps:
+                if step["module"] == "weblinks" and step["item_id"]:
+                    step["url"] = _weblink_url(session, found, step["item_id"])
+                elif step["module"] == "exercises" and step["item_id"] in exercises:
+                    exercise = exercises[step["item_id"]]
+                    step["provider"] = exercise["provider"]
+                    step["url"] = session.create_url(exercise["url"])
+        return {
+            "course": {"id": found.id, "name": found.name},
+            "id": learning_path_id,
+            **result,
+            "total_steps": len(steps),
+        }
+    except Exception as e:
+        return {"error": f"Failed to retrieve learning path: {e!s}"}
 
 
 @mcp.tool()
@@ -1008,7 +1694,7 @@ def download_attachment(
 
     Files are saved to *save_path* when provided, otherwise to
     ~/Downloads/smartschool/.  The directory is created automatically.
-    Existing files are never overwritten — a counter suffix is appended
+    Existing files are never overwritten â€” a counter suffix is appended
     instead (e.g. ``report (1).pdf``).
 
     Args:
@@ -1023,8 +1709,6 @@ def download_attachment(
         - download_attachment(249184, 12345) -> Download to ~/Downloads/smartschool/
         - download_attachment(249184, 12345, "/tmp") -> Download to /tmp/
     """
-    from pathlib import Path
-
     try:
         target_attachment = None
         for att in Attachments(_session(), msg_id=message_id):
@@ -1043,24 +1727,9 @@ def download_attachment(
         if not resp.ok:
             return {"error": f"Download failed: HTTP {resp.status_code}"}
 
-        download_dir = (
-            Path(save_path) if save_path else Path.home() / "Downloads" / "smartschool"
-        )
-        download_dir.mkdir(parents=True, exist_ok=True)
-
-        # Sanitise filename to prevent path-traversal attacks
         raw_name = getattr(target_attachment, "name", "") or ""
         filename = Path(raw_name).name or f"attachment_{file_id}"
-        file_path = download_dir / filename
-
-        # Never overwrite — append a counter suffix
-        counter = 1
-        stem = file_path.stem
-        while file_path.exists():
-            file_path = download_dir / f"{stem} ({counter}){file_path.suffix}"
-            counter += 1
-
-        file_path.write_bytes(resp.content)
+        file_path = _save_download(resp.content, filename, save_path)
 
         return {
             "file_id": file_id,
@@ -1100,7 +1769,7 @@ def get_homepage_blocks(include_html: bool = False) -> dict[str, Any]:
     Retrieve the "in de kijker" blocks pinned to the Smartschool homepage.
 
     Schools use these blocks for recurring content that is never sent as a
-    message and never lands in a document module — a monthly lunch menu
+    message and never lands in a document module â€” a monthly lunch menu
     ("Maandmenu"), a monthly calendar ("Maandkalender"), announcements. The
     content is frequently an embedded image rather than text, so ``images``
     is usually where the information actually lives.
@@ -1174,8 +1843,7 @@ def download_homepage_image(
     Returns:
         Dictionary with the saved file path and bytes written.
     """
-    from pathlib import Path
-    from urllib.parse import unquote, urlparse
+    from urllib.parse import unquote
 
     try:
         session = _session()
@@ -1187,23 +1855,8 @@ def download_homepage_image(
         if not resp.ok:
             return {"error": f"Failed to download image: HTTP {resp.status_code}"}
 
-        download_dir = (
-            Path(save_path) if save_path else Path.home() / "Downloads" / "smartschool"
-        )
-        download_dir.mkdir(parents=True, exist_ok=True)
-
-        # Sanitise filename to prevent path-traversal attacks
         filename = Path(unquote(urlparse(image_url).path)).name or "homepage_image"
-        file_path = download_dir / filename
-
-        # Never overwrite — append a counter suffix
-        counter = 1
-        stem = file_path.stem
-        while file_path.exists():
-            file_path = download_dir / f"{stem} ({counter}){file_path.suffix}"
-            counter += 1
-
-        file_path.write_bytes(resp.content)
+        file_path = _save_download(resp.content, filename, save_path)
 
         return {
             "name": file_path.name,

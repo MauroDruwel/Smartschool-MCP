@@ -31,7 +31,7 @@ CI runs lint → typecheck → tests (Python 3.10–3.13) in that order. All thr
 
 ## Architecture
 
-The package is a single-file MCP server (`smartschool_mcp/server.py`) plus an entry-point module (`smartschool_mcp/__main__.py`).
+The package is an MCP server (`smartschool_mcp/server.py`), an entry-point module (`smartschool_mcp/__main__.py`), and `smartschool_mcp/content.py`: pure parsers for planner element details and the server-rendered leerpaden/exercises pages, tested on anonymised responses in `tests/fixtures/`.
 
 ### Transport modes
 
