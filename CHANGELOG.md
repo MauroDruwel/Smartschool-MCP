@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `get_student_absences(since?)` — absences recorded in the Leerlingvolgsysteem (`part_of_day` is `null` when not specified)
 - Both tools return `{"error": ...}` ("the student file (LVS) is not available for this account") when Smartschool rejects the request, e.g. for an account without the LVS module
 
+### Fixed
+
+- `get_schedule` and `get_future_tasks` read the planner when the legacy agenda is empty, as it is at schools that moved to the planner: the timetable comes from the `planned-lessons`, `planned-placeholders` and `planned-lesson-cluster-moments` elements, the tasks from `planned-assignments` and `planned-to-dos`. Both results carry `source` (`"agenda"` or `"planner"`); when the planner can't be read, the agenda's result comes back with `planner_error`
+
 ### Changed
 
 - Requires `smartschool>=0.12.0`; `uv.lock` now resolves it from PyPI instead of a git checkout (the `[tool.uv.sources]` entry is gone)
