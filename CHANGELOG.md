@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `get_student_notes(limit?, offset?, category?, since?, include_details?)` — student file notes ("dossierlijnen", Leerlingvolgsysteem); confidential notes are never returned, details only on request. With `include_details`, each note's `details` holds `text` (plain text), `fields`, `date`, `choice` (the label of the note's select field, e.g. the measure of an order measure) and `attachments` (a list of `{name, mime}`)
 - `get_student_absences(since?)` — absences recorded in the Leerlingvolgsysteem (`part_of_day` is `null` when not specified)
 - Both tools return `{"error": ...}` ("the student file (LVS) is not available for this account") when Smartschool rejects the request, e.g. for an account without the LVS module
+- `get_planned_element_details(element_id, element_type?)` — a planner element's description (as text), attachments, links (weblinks, partner and course links, document deeplinks with their course and doc id) and `links_without_url`, the titles linked in the description without an address (usually Bookwidgets)
+- `download_planned_attachment(element_id, attachment_id, element_type?, save_path?)`
+- `get_course_documents(course?, folder_id?)` and `download_course_document(course, doc_id, folder_id?, save_path?)` — a course's Documenten; `course` is an id or part of the name, and leaving it out lists the courses
+- `get_learning_paths(course?)` and `get_learning_path(course, learning_path_id, resolve_links?)` — a course's leerpaden, and a leerpad's sections and steps with `done`, `progress_percent` and, for web links and external exercises (Bookwidgets), their address. Only the overview is read, so the pupil's progress is left untouched
+- `get_planned_elements`: each element has `id`, `platform_id`, `type_label` and `is_exam`; new `types` and `include_details` parameters
 
 ### Fixed
 
@@ -19,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `get_planned_elements` returns every planner type that matters for planning: besides assignments and to-dos, events (exam periods, report days, parent evenings), days off and school activities, and the lessons that are an exam or a test. Plain lessons and empty timetable slots are left out unless asked for with `types`, and a lesson that duplicates an assignment of the same name on the same day is dropped
+- `download_attachment` and `download_homepage_image` share the new downloads' file-saving code (same behaviour)
 - Requires `smartschool>=0.12.0`; `uv.lock` now resolves it from PyPI instead of a git checkout (the `[tool.uv.sources]` entry is gone)
 - Parse homepage HTML with BeautifulSoup directly, since `smartschool` 0.12 no longer exports `bs4_html`
 
