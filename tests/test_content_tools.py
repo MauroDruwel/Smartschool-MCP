@@ -26,8 +26,12 @@ def _fixture(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf8")
 
 
+def _raw_elements() -> list[dict[str, Any]]:
+    return json.loads(_fixture("planner_elements.json"))
+
+
 def _elements() -> list[PlannedElement]:
-    return [PlannedElement(**e) for e in json.loads(_fixture("planner_elements.json"))]
+    return [PlannedElement(**e) for e in _raw_elements()]
 
 
 @pytest.fixture(autouse=True)
@@ -158,13 +162,21 @@ def test_parse_exercise_folder_finds_bookwidgets() -> None:
 # ── get_planned_elements ─────────────────────────────────────────────────────
 
 
-def test_get_planned_elements_default_skips_timetable_but_keeps_exams() -> None:
-    with patch(
-        "smartschool_mcp.server.PlannedElements", return_value=_elements()
-    ) as pe:
-        result = srv.get_planned_elements()
+def _list_call(session: MagicMock) -> tuple[str, dict[str, Any]]:
+    """The planner list request get_planned_elements made."""
+    url = session.json.call_args.args[0]
+    return url, session.json.call_args.kwargs["data"]
 
-    assert pe.call_args.kwargs["element_types"] is None
+
+def test_get_planned_elements_default_skips_timetable_but_keeps_exams(
+    session: MagicMock,
+) -> None:
+    session.json.return_value = _raw_elements()
+    result = srv.get_planned_elements()
+
+    url, params = _list_call(session)
+    assert url.startswith("/planner/api/v1/planned-elements/user/")
+    assert "types" not in params
     names = [(e["type"], e["name"]) for e in result["planned_elements"]]
     types = {t for t, _ in names}
     assert "planned-placeholders" not in types
@@ -187,45 +199,71 @@ def test_get_planned_elements_default_skips_timetable_but_keeps_exams() -> None:
     assert exam["id"] in srv._planner_index
 
 
-def test_get_planned_elements_types_returns_exactly_what_was_asked() -> None:
-    lessons = [e for e in _elements() if e.planned_element_type == "planned-lessons"]
-    with patch("smartschool_mcp.server.PlannedElements", return_value=lessons) as pe:
-        result = srv.get_planned_elements(types=["planned-lessons"])
+def test_get_planned_elements_asks_the_content_in_the_same_request(
+    session: MagicMock,
+) -> None:
+    session.json.return_value = _raw_elements()
+    srv.get_planned_elements()
 
-    assert pe.call_args.kwargs["element_types"] == ["planned-lessons"]
+    session.json.assert_called_once()
+    includes = _list_call(session)[1]["includes"].split(",")
+    # The defaults first: asking for any include drops them.
+    assert includes[:3] == ["icon", "courses", "locations"]
+    assert {"attachments", "weblinks", "deeplinks", "public-info"} <= set(includes)
+
+
+def test_get_planned_elements_flags_what_an_element_has_to_show(
+    session: MagicMock,
+) -> None:
+    session.json.return_value = _raw_elements()
+    result = srv.get_planned_elements()
+
+    flags = {
+        e["name"]: (e["has_attachments"], e["has_links"], e["has_description"])
+        for e in result["planned_elements"]
+    }
+    toets = next(n for n in flags if n.startswith("Toets zuivere stoffen"))
+    assert flags[toets] == (True, False, True)
+    # A description that only repeats the name is no description.
+    assert flags["taak optica"] == (False, False, False)
+    # A Bookwidget title without an address counts as a link.
+    assert flags["Examen"] == (False, True, True)
+    assert flags["Examens"] == (False, True, False)
+    assert flags["Kerstvakantie"] == (False, False, False)
+    assert "details" not in result["planned_elements"][0]
+
+
+def test_get_planned_elements_types_returns_exactly_what_was_asked(
+    session: MagicMock,
+) -> None:
+    lessons = [
+        e for e in _raw_elements() if e["plannedElementType"] == "planned-lessons"
+    ]
+    session.json.return_value = lessons
+    result = srv.get_planned_elements(types=["planned-lessons"])
+
+    assert _list_call(session)[1]["types"] == "planned-lessons"
     assert result["total"] == len(lessons)
 
 
-def test_get_planned_elements_include_details(session: MagicMock) -> None:
-    session.json.return_value = json.loads(_fixture("planner_detail.json"))
-    with patch("smartschool_mcp.server.PlannedElements", return_value=_elements()):
-        result = srv.get_planned_elements(include_details=True)
+def test_get_planned_elements_include_details_needs_no_extra_request(
+    session: MagicMock,
+) -> None:
+    session.json.return_value = _raw_elements()
+    result = srv.get_planned_elements(include_details=True)
 
-    first = result["planned_elements"][0]
-    assert set(first["details"]) == set(srv._DETAIL_KEYS)
-    assert first["details"]["attachments"][0]["name"].endswith(".png")
-    assert session.json.call_count == result["total"]
-    assert "details_skipped" not in result
-
-
-def test_get_planned_elements_include_details_is_capped(session: MagicMock) -> None:
-    session.json.return_value = json.loads(_fixture("planner_detail.json"))
-    with (
-        patch("smartschool_mcp.server.PlannedElements", return_value=_elements()),
-        patch("smartschool_mcp.server._MAX_DETAILS", 2),
-    ):
-        result = srv.get_planned_elements(include_details=True)
-
-    assert session.json.call_count == 2
-    assert result["details_skipped"] == result["total"] - 2
+    session.json.assert_called_once()
+    exam = next(e for e in result["planned_elements"] if e["name"] == "Examen")
+    assert set(exam["details"]) == set(srv._DETAIL_KEYS)
+    assert exam["details"]["description"].startswith("Leerstof: thema 1 tot 3.")
+    assert exam["details"]["links_without_url"] == ["Oefentoets"]
 
 
-def test_get_planned_elements_reports_a_failing_detail(session: MagicMock) -> None:
-    session.json.side_effect = RuntimeError("boom")
-    with patch("smartschool_mcp.server.PlannedElements", return_value=_elements()):
-        result = srv.get_planned_elements(include_details=True)
+def test_get_planned_elements_empty_answer(session: MagicMock) -> None:
+    session.json.return_value = {}
+    result = srv.get_planned_elements()
 
-    assert result["planned_elements"][0]["details_error"] == "boom"
+    assert result["total"] == 0
 
 
 # ── planner element details and attachments ──────────────────────────────────
