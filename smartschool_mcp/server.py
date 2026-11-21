@@ -29,6 +29,7 @@ from smartschool import (
     Message,
     MessageHeaders,
     Periods,
+    PlannedElement,
     PlannedElements,
     Reports,
     Results,
@@ -811,8 +812,22 @@ def get_reports() -> list[dict[str, Any]]:
 # Elements fetched with get_planned_elements, by id, so the detail tools can
 # find an element's type and platform without listing the planner again.
 _planner_index: dict[str, tuple[str, int]] = {}
-# get_planned_elements(include_details=True) reads at most this many details.
-_MAX_DETAILS = 40
+# Asked along with the planner list, so each element carries what its detail
+# page holds (description, attachments, links, to-dos) without a request each.
+# Asking for any `includes` drops the default ones, hence icon/courses/locations.
+_PLANNER_LIST_INCLUDES = ",".join(
+    (
+        "icon",
+        "courses",
+        "locations",
+        "attachments",
+        "weblinks",
+        "deeplinks",
+        "partner-weblinks",
+        "public-info",
+        "planned-to-dos",
+    )
+)
 # Upper bound on the folders a tool walks, so a large course stays quick.
 _MAX_FOLDERS = 40
 _DETAIL_KEYS = ("description", "attachments", "links", "links_without_url", "to_dos")
@@ -836,6 +851,32 @@ def _planner_element_summary(element: Any) -> dict[str, Any]:
         "pinned": element.pinned,
         "assignment_type": assignment_type,
     }
+
+
+def _planner_list(
+    session: Smartschool,
+    from_date: date,
+    till_date: date,
+    types: list[str] | None,
+) -> list[dict[str, Any]]:
+    """
+    The planner elements of the logged-in user, with their content.
+
+    The same request as the library's ``PlannedElements``, plus ``includes``:
+    the library has no way to ask for them.
+    """
+    params = {
+        "from": from_date.isoformat(),
+        "to": till_date.isoformat(),
+        "includes": _PLANNER_LIST_INCLUDES,
+    }
+    if types:
+        params["types"] = ",".join(types)
+    user_id = session.authenticated_user["id"]
+    elements = session.json(
+        f"/planner/api/v1/planned-elements/user/{user_id}", data=params
+    )
+    return elements if isinstance(elements, list) else []
 
 
 def _same_test(lesson: dict[str, Any], other: dict[str, Any]) -> bool:
@@ -907,28 +948,40 @@ def get_planned_elements(
             planned-meetings, planned-lesson-free-days,
             planned-school-activities, planned-activities, planned-generics,
             planned-placeholders, planned-lesson-cluster-moments.
-        include_details: Also read each element's description, attachments
-            and links (one extra request per element, at most 40).
+        include_details: Also return each element's description, attachments
+            and links (see get_planned_element_details). They come with the
+            same request; the option only makes the result longer.
 
     Returns:
         Dictionary with the planned elements: id, name, type, readable
-        ``type_label``, ``is_exam``, dates, courses and assignment type, and
-        ``details`` (see get_planned_element_details) when asked for.
+        ``type_label``, ``is_exam``, dates, courses, assignment type, and
+        whether the element has more to show: ``has_attachments``,
+        ``has_links`` (links with an address, or Bookwidget titles without
+        one) and ``has_description`` (a description that says more than the
+        name). ``details`` holds that content when asked for.
     """
     try:
         session = _session()
         from_date = date.today()
         till_date = from_date + timedelta(days=days_ahead)
-        elements = PlannedElements(
-            session, till_date=till_date, element_types=types or None
-        )
+        base_url = session.create_url("/")
+        raw_elements = [
+            (PlannedElement(**raw), raw)
+            for raw in _planner_list(session, from_date, till_date, types)
+        ]
         elements_list = []
-        for element in sorted(elements, key=lambda e: e.period.date_time_from):
+        for element, raw in sorted(
+            raw_elements, key=lambda pair: pair[0].period.date_time_from
+        ):
             _planner_index[str(element.id)] = (
                 element.planned_element_type,
                 element.platform_id,
             )
             summary = _planner_element_summary(element)
+            detail = content.planner_detail(raw, base_url)
+            summary.update(content.content_flags(detail))
+            if include_details:
+                summary["details"] = {key: detail[key] for key in _DETAIL_KEYS}
             if not types and (
                 summary["type"] in content.EMPTY_SLOT_TYPES
                 or (summary["type"] == "planned-lessons" and not summary["is_exam"])
@@ -942,20 +995,6 @@ def get_planned_elements(
                 if not any(_same_test(s, other) for other in elements_list)
             ]
 
-        if include_details:
-            for summary in elements_list[:_MAX_DETAILS]:
-                try:
-                    url = _planner_detail_url(
-                        summary["type"], summary["platform_id"], summary["id"]
-                    )
-                    detail = content.planner_detail(
-                        session.json(url), session.create_url("/")
-                    )
-                    summary["details"] = {key: detail[key] for key in _DETAIL_KEYS}
-                except Exception as e:
-                    summary["details_error"] = f"{e!s}"
-        skipped = max(0, len(elements_list) - _MAX_DETAILS) if include_details else 0
-
         return {
             "planned_elements": elements_list,
             "total": len(elements_list),
@@ -963,7 +1002,6 @@ def get_planned_elements(
                 "from": from_date.strftime("%Y-%m-%d"),
                 "to": till_date.strftime("%Y-%m-%d"),
             },
-            **({"details_skipped": skipped} if skipped else {}),
         }
 
     except Exception as e:

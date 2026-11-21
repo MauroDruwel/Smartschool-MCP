@@ -86,7 +86,24 @@
    "defaultTiming": "deadline",
    "weight": 5
   },
-  "locations": []
+  "locations": [],
+  "attachments": [
+   {
+    "id": "00000000-0000-0000-0000-0000000000a1",
+    "fileName": "samenvatting.pdf",
+    "fileSize": 1024,
+    "mimeType": "application/pdf",
+    "visibility": {
+     "option": "always",
+     "daysAfterEnd": null
+    }
+   }
+  ],
+  "weblinks": [],
+  "deeplinks": [],
+  "partnerWeblinks": [],
+  "plannedToDos": [],
+  "publicInfo": "<p>Kennen: pg 30-45 en de oefeningen.</p>"
  },
  {
   "id": "00000000-0000-0000-0000-000000000005",
@@ -175,7 +192,13 @@
    "defaultTiming": "deadline",
    "weight": 2
   },
-  "locations": []
+  "locations": [],
+  "attachments": [],
+  "weblinks": [],
+  "deeplinks": [],
+  "partnerWeblinks": [],
+  "plannedToDos": [],
+  "publicInfo": "<p>Taak  optica</p>"
  },
  {
   "id": "00000000-0000-0000-0000-000000000009",
@@ -233,7 +256,19 @@
    "to": "00000000-0000-0000-0000-00000000000b"
   },
   "locations": [],
-  "courses": []
+  "courses": [],
+  "attachments": [],
+  "weblinks": [
+   {
+    "id": "w2",
+    "name": "Examenrooster",
+    "url": "https://school.example/rooster"
+   }
+  ],
+  "deeplinks": [],
+  "partnerWeblinks": [],
+  "plannedToDos": [],
+  "publicInfo": ""
  },
  {
   "id": "00000000-0000-0000-0000-00000000000c",
@@ -291,7 +326,13 @@
    "to": "00000000-0000-0000-0000-00000000000e"
   },
   "locations": [],
-  "courses": []
+  "courses": [],
+  "attachments": [],
+  "weblinks": [],
+  "deeplinks": [],
+  "partnerWeblinks": [],
+  "plannedToDos": [],
+  "publicInfo": ""
  },
  {
   "id": "00000000-0000-0000-0000-00000000000f",
@@ -366,7 +407,13 @@
     "isVisible": true
    }
   ],
-  "locations": []
+  "locations": [],
+  "attachments": [],
+  "weblinks": [],
+  "deeplinks": [],
+  "partnerWeblinks": [],
+  "plannedToDos": [],
+  "publicInfo": "<p>Leerstof: thema 1 tot 3.</p><ul><li><strong><a target=\"_blank\" rel=\"noreferrer noopener\">Oefentoets</a></strong></li></ul>"
  },
  {
   "id": "00000000-0000-0000-0000-000000000013",
@@ -443,7 +490,13 @@
     "isVisible": true
    }
   ],
-  "locations": []
+  "locations": [],
+  "attachments": [],
+  "weblinks": [],
+  "deeplinks": [],
+  "partnerWeblinks": [],
+  "plannedToDos": [],
+  "publicInfo": ""
  },
  {
   "id": "00000000-0000-0000-0000-000000000017",
@@ -561,7 +614,13 @@
    "to": "00000000-0000-0000-0000-00000000001d"
   },
   "courses": [],
-  "locations": []
+  "locations": [],
+  "attachments": [],
+  "weblinks": [],
+  "deeplinks": [],
+  "partnerWeblinks": [],
+  "plannedToDos": [],
+  "publicInfo": ""
  },
  {
   "id": "00000000-0000-0000-0000-00000000001e",
@@ -637,6 +696,12 @@
     "isVisible": true
    }
   ],
-  "locations": []
+  "locations": [],
+  "attachments": [],
+  "weblinks": [],
+  "deeplinks": [],
+  "partnerWeblinks": [],
+  "plannedToDos": [],
+  "publicInfo": ""
  }
 ]

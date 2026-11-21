@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `download_planned_attachment(element_id, attachment_id, element_type?, save_path?)`
 - `get_course_documents(course?, folder_id?)` and `download_course_document(course, doc_id, folder_id?, save_path?)` — a course's Documenten; `course` is an id or part of the name, and leaving it out lists the courses
 - `get_learning_paths(course?)` and `get_learning_path(course, learning_path_id, resolve_links?)` — a course's leerpaden, and a leerpad's sections and steps with `done`, `progress_percent` and, for web links and external exercises (Bookwidgets), their address. Only the overview is read, so the pupil's progress is left untouched
-- `get_planned_elements`: each element has `id`, `platform_id`, `type_label` and `is_exam`; new `types` and `include_details` parameters
+- `get_planned_elements`: each element has `id`, `platform_id`, `type_label`, `is_exam`, and `has_attachments`, `has_links` (links with an address, or Bookwidget titles without one) and `has_description` (a description that says more than the name); new `types` and `include_details` parameters. The planner list is asked with `includes`, so this content comes with the one request, details included
 
 ### Fixed
 

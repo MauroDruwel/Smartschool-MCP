@@ -168,6 +168,26 @@ def planner_detail(detail: dict[str, Any], base_url: str) -> dict[str, Any]:
     }
 
 
+def _normalised(text: str | None) -> str:
+    return " ".join((text or "").split()).casefold()
+
+
+def content_flags(detail: dict[str, Any]) -> dict[str, bool]:
+    """
+    Whether a summarised planner element (``planner_detail``) has more to show.
+
+    ``has_links`` counts the links without an address too (Bookwidgets);
+    ``has_description`` is false when the description only repeats the name.
+    """
+    description = _normalised(detail["description"])
+    return {
+        "has_attachments": bool(detail["attachments"]),
+        "has_links": bool(detail["links"] or detail["links_without_url"]),
+        "has_description": bool(description)
+        and description != _normalised(detail["name"]),
+    }
+
+
 # ── Leerpaden (server-rendered HTML) ──────────────────────────────────────────
 
 _LPATH_FOLDER_RE = re.compile(r"/Lpaths/Index/Index/courseID/\d+/parentID/(\d+)")

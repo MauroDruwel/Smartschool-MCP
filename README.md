@@ -22,7 +22,7 @@ Connect Claude (and other MCP clients) to your Smartschool account — ask about
 | `get_schedule` | Day schedule by offset (0 = today, 1 = tomorrow, …), from the agenda or the planner |
 | `get_periods` | Academic terms for the current school year |
 | `get_reports` | Available report cards |
-| `get_planned_elements` | Planner items for the next N days: assignments, to-dos, events, days off, and the lessons that are an exam or a test (`is_exam`); `types` filter, `include_details` for descriptions, attachments and links |
+| `get_planned_elements` | Planner items for the next N days: assignments, to-dos, events, days off, and the lessons that are an exam or a test (`is_exam`). Each item says whether it has more to show (`has_attachments`, `has_links`, `has_description`), in the same single request; `types` filter, `include_details` for the descriptions, attachments and links themselves |
 | `get_planned_element_details` | One planner item in full: description, attachments, links (weblinks, documents, Bookwidget titles) |
 | `download_planned_attachment` | Download an attachment of a planner item |
 | `get_course_documents` | Browse a course's Documenten folder by folder (or list the courses) |
