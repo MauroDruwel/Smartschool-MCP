@@ -318,7 +318,7 @@ def get_results(
                 result_data.update({"average": None, "median": None})
 
                 try:
-                    # details is a lazy-loaded property — fetches on first access
+                    # details is a lazy-loaded property â€” fetches on first access
                     detail = result.details
 
                     # Extract statistical information (central tendencies)
@@ -340,7 +340,7 @@ def get_results(
                             }
 
                 except Exception:
-                    # central_tendencies unavailable — keep default None values
+                    # central_tendencies unavailable â€” keep default None values
                     pass
 
             results_list.append(result_data)
@@ -381,13 +381,111 @@ class _DayDict(TypedDict):
     courses: list[_CourseDict]
 
 
+# Planner element types that make up a day's timetable: lessons with content,
+# empty timetable slots, and moments of a lesson cluster.
+_PLANNER_LESSON_TYPES = (
+    "planned-lessons",
+    "planned-placeholders",
+    "planned-lesson-cluster-moments",
+)
+_PLANNER_TASK_TYPES = ("planned-assignments", "planned-to-dos")
+
+
+def _planner_location(element: Any) -> str | None:
+    names = [
+        getattr(loc, "title", None)
+        or getattr(loc, "text", None)
+        or getattr(loc, "number", None)
+        for loc in getattr(element, "locations", None) or []
+    ]
+    return ", ".join(n for n in names if n) or None
+
+
+def _planner_organisers(element: Any) -> str | None:
+    users = getattr(getattr(element, "organisers", None), "users", None) or []
+    names = []
+    for user in users:
+        with contextlib.suppress(AttributeError):
+            names.append(user.name.starting_with_last_name)
+    return ", ".join(names) or None
+
+
+def _planner_future_tasks(session: Smartschool, days_ahead: int = 34) -> list[_DayDict]:
+    """Planner assignments and to-dos, shaped like the agenda's future tasks."""
+    days: dict[str, dict[str, list[_TaskDict]]] = {}
+    elements = PlannedElements(
+        session,
+        till_date=date.today() + timedelta(days=days_ahead),
+        element_types=_PLANNER_TASK_TYPES,
+    )
+    for element in sorted(elements, key=lambda e: e.period.date_time_from):
+        day = element.period.date_time_from.strftime("%Y-%m-%d")
+        course = ", ".join(c.name for c in element.courses) or "-"
+        label = (
+            element.assignment_type.name
+            if element.assignment_type
+            else (
+                "To-do" if element.planned_element_type == "planned-to-dos" else "N/A"
+            )
+        )
+        days.setdefault(day, {}).setdefault(course, []).append(
+            {"label": label, "description": element.name, "warning": False}
+        )
+    return [
+        {
+            "date": day,
+            "courses": [
+                {"name": name, "tasks": tasks} for name, tasks in courses.items()
+            ],
+        }
+        for day, courses in days.items()
+    ]
+
+
+def _planner_lessons(session: Smartschool, target_date: date) -> list[dict[str, Any]]:
+    """A day's timetable from the planner, in the shape of the agenda lessons."""
+    elements = PlannedElements(
+        session,
+        from_date=target_date,
+        till_date=target_date + timedelta(days=1),
+        element_types=_PLANNER_LESSON_TYPES,
+    )
+    lessons = []
+    for element in elements:
+        period = element.period
+        if period.date_time_from.date() != target_date:
+            continue
+        lessons.append(
+            {
+                "moment_id": str(element.id),
+                "date": target_date.strftime("%Y-%m-%d"),
+                "hour": f"{period.date_time_from:%H:%M}-{period.date_time_to:%H:%M}",
+                "course": ", ".join(c.name for c in element.courses) or None,
+                "classroom": _planner_location(element),
+                "teacher": _planner_organisers(element),
+                "subject": element.name or None,
+                "note": None,
+                "color": element.color,
+                "assignment_end_status": None,
+                "test_deadline_status": None,
+                "type": element.planned_element_type,
+            }
+        )
+    return sorted(lessons, key=lambda lesson: lesson["hour"])
+
+
 @mcp.tool()
 def get_future_tasks() -> dict[str, Any]:
     """
     Retrieve upcoming assignments and tasks.
 
+    Reads the agenda's future tasks; when the agenda is empty, as at schools
+    that use the planner, reads the planner's assignments and to-dos for the
+    next 34 days instead.
+
     Returns:
-        Dictionary with future tasks organized by date and course.
+        Dictionary with future tasks organized by date and course, and
+        ``source`` ("agenda" or "planner").
     """
     try:
         future_tasks = FutureTasks(_session())
@@ -423,6 +521,16 @@ def get_future_tasks() -> dict[str, Any]:
             if day_data["courses"]:
                 tasks_data.append(day_data)
 
+        source = "agenda"
+        planner_error = None
+        if not tasks_data:
+            # Schools that moved to the planner leave the old agenda empty.
+            try:
+                tasks_data = _planner_future_tasks(_session())
+                source = "planner"
+            except Exception as e:
+                planner_error = f"{e!s}"
+
         total_tasks = sum(
             len(course["tasks"]) for day in tasks_data for course in day["courses"]
         )
@@ -431,6 +539,8 @@ def get_future_tasks() -> dict[str, Any]:
             "future_tasks": tasks_data,
             "total_days": len(tasks_data),
             "total_tasks": total_tasks,
+            "source": source,
+            **({"planner_error": planner_error} if planner_error else {}),
         }
 
     except Exception as e:
@@ -477,7 +587,7 @@ def get_messages(
         except AttributeError:
             box_type_enum = BoxType.INBOX  # Default fallback
 
-        # Get message headers — headers already carry from_, subject, date, unread
+        # Get message headers â€” headers already carry from_, subject, date, unread
         all_headers = list(MessageHeaders(_session(), box_type=box_type_enum))
 
         # Apply sender filter directly from headers (no full message fetch needed)
@@ -581,8 +691,13 @@ def get_schedule(date_offset: int = 0) -> dict[str, Any]:
         date_offset: Days from today (0=today, 1=tomorrow, -1=yesterday,
             default: 0)
 
+    Reads the agenda; when it has no lessons that day, as at schools that use
+    the planner, reads the planner's lessons, timetable slots and cluster
+    moments for that day instead.
+
     Returns:
-        Dictionary with the lessons scheduled for the given date.
+        Dictionary with the lessons scheduled for the given date, and
+        ``source`` ("agenda" or "planner").
     """
     try:
         target_date = date.today() + timedelta(days=date_offset)
@@ -605,10 +720,22 @@ def get_schedule(date_offset: int = 0) -> dict[str, Any]:
                 }
             )
 
+        source = "agenda"
+        planner_error = None
+        if not lessons_list:
+            # Schools that moved to the planner leave the old agenda empty.
+            try:
+                lessons_list = _planner_lessons(_session(), target_date)
+                source = "planner"
+            except Exception as e:
+                planner_error = f"{e!s}"
+
         return {
             "date": target_date.strftime("%Y-%m-%d"),
             "lessons": lessons_list,
             "total": len(lessons_list),
+            "source": source,
+            **({"planner_error": planner_error} if planner_error else {}),
         }
 
     except Exception as e:
@@ -1008,7 +1135,7 @@ def download_attachment(
 
     Files are saved to *save_path* when provided, otherwise to
     ~/Downloads/smartschool/.  The directory is created automatically.
-    Existing files are never overwritten — a counter suffix is appended
+    Existing files are never overwritten â€” a counter suffix is appended
     instead (e.g. ``report (1).pdf``).
 
     Args:
@@ -1053,7 +1180,7 @@ def download_attachment(
         filename = Path(raw_name).name or f"attachment_{file_id}"
         file_path = download_dir / filename
 
-        # Never overwrite — append a counter suffix
+        # Never overwrite â€” append a counter suffix
         counter = 1
         stem = file_path.stem
         while file_path.exists():
@@ -1100,7 +1227,7 @@ def get_homepage_blocks(include_html: bool = False) -> dict[str, Any]:
     Retrieve the "in de kijker" blocks pinned to the Smartschool homepage.
 
     Schools use these blocks for recurring content that is never sent as a
-    message and never lands in a document module — a monthly lunch menu
+    message and never lands in a document module â€” a monthly lunch menu
     ("Maandmenu"), a monthly calendar ("Maandkalender"), announcements. The
     content is frequently an embedded image rather than text, so ``images``
     is usually where the information actually lives.
@@ -1196,7 +1323,7 @@ def download_homepage_image(
         filename = Path(unquote(urlparse(image_url).path)).name or "homepage_image"
         file_path = download_dir / filename
 
-        # Never overwrite — append a counter suffix
+        # Never overwrite â€” append a counter suffix
         counter = 1
         stem = file_path.stem
         while file_path.exists():
