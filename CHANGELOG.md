@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Requires `smartschool>=0.12.0`; `uv.lock` now resolves it from PyPI instead of a git checkout (the `[tool.uv.sources]` entry is gone)
+- Requires `smartschool>=0.13.0` (planner `element_types`, and `authenticated_user` for parent co-accounts); `uv.lock` now resolves it from PyPI instead of a git checkout (the `[tool.uv.sources]` entry is gone)
 - Parse homepage HTML with BeautifulSoup directly, since `smartschool` 0.12 no longer exports `bs4_html`
 
 ## [0.3.0] - 2026-09-22
