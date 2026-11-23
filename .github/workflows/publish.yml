@@ -87,3 +87,6 @@ jobs:
 
       - name: Publish to MCP Registry
         run: ./mcp-publisher publish
+
+      # Claude Desktop .mcpb is attached by .github/workflows/mcpb.yml on the
+      # same release:published event (asset smartschool-mcp-<version>.mcpb).

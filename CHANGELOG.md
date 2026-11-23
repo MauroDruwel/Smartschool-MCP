@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Publishing a GitHub Release builds `smartschool-mcp-<version>.mcpb` and attaches it to that release (version stamped from the tag into the Desktop manifest). PR builds still upload a temporary Actions artifact.
+
 ### Changed
 
 - `get_schedule` uses the Planner calendar GET (no `types` filter) instead of the removed Schoolagenda XML. The MCP reads that JSON itself so element id, description, and upload folders are not dropped by `PlannedElement`

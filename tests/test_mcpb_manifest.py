@@ -55,7 +55,9 @@ def test_manifest_configure_saves_into_the_central_store() -> None:
         assert field["description"]
     assert user_config["password"]["sensitive"] is True
     assert user_config["birth_date"]["sensitive"] is True
-    assert user_config["birth_date"]["title"] == "Geboortedatum van je kind (jjjj-mm-dd)"
+    assert (
+        user_config["birth_date"]["title"] == "Geboortedatum van je kind (jjjj-mm-dd)"
+    )
     assert "jjjj-mm-dd" in user_config["birth_date"]["title"]
     assert user_config["child_name"]["title"] == "Naam van je kind"
     assert user_config["school"].get("sensitive") is not True
@@ -92,7 +94,31 @@ def test_bundle_pyproject_vendors_the_pinned_fork() -> None:
     assert build_mcpb.SMARTSCHOOL_REV in text
     assert 'path = "vendor/smartschool"' in text
     assert "git =" not in text
+    assert 'version = "0.2.0"' in text
     build_mcpb.assert_repo_pin(ROOT)
+
+
+def test_version_helpers_map_tags_and_pre_releases() -> None:
+    assert build_mcpb.normalize_manifest_version("v0.3.0") == "0.3.0"
+    assert build_mcpb.normalize_manifest_version("0.3.0-rc.2") == "0.3.0-rc.2"
+    assert build_mcpb.pep440_version("v0.3.0") == "0.3.0"
+    assert build_mcpb.pep440_version("0.3.0-rc.2") == "0.3.0rc2"
+    assert build_mcpb.pep440_version("0.3.0rc1") == "0.3.0rc1"
+    text = build_mcpb.bundle_pyproject("0.3.0-rc.2")
+    assert 'version = "0.3.0rc2"' in text
+    assert build_mcpb.default_output_path("v0.3.0").name == (
+        "smartschool-mcp-0.3.0.mcpb"
+    )
+
+
+def test_stamp_manifest_version_updates_json(tmp_path: Path) -> None:
+    source = ROOT / "manifest.json"
+    staged = tmp_path / "manifest.json"
+    staged.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    stamped = build_mcpb.stamp_manifest_version(staged, "v0.3.0-rc.2")
+    assert stamped == "0.3.0-rc.2"
+    data = json.loads(staged.read_text(encoding="utf-8"))
+    assert data["version"] == "0.3.0-rc.2"
 
 
 def test_dutch_parent_guide_lists_tools_and_lockout() -> None:
