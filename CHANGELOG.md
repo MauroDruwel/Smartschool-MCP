@@ -7,20 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-23
+
 ### Added
 
 - Claude Code plugin skill `daily-briefing` (`/smartschool:daily-briefing`): short Dutch weekday parent briefing from Smartschool (MCP tools when available, else plugin scripts). No family-specific ids or mail addresses; optional mail only when the user asks.
 - Publishing a GitHub Release builds `smartschool-mcp-<version>.mcpb` and attaches it to that release (version stamped from the tag into the Desktop manifest). PR builds still upload a temporary Actions artifact.
-
-### Changed
-
-- `get_schedule` uses the Planner calendar GET (no `types` filter) instead of the removed Schoolagenda XML. The MCP reads that JSON itself so element id, description, and upload folders are not dropped by `PlannedElement`
-- `get_planned_elements` matches that calendar GET by default; optional `types` and `includes` for sidebar subsets
-- Pin `smartschool` to `markminnoye/smartschool@517de70` (`planner-calendar-1to1`) until upstream merges Planner calendar
-- Bump `smartschool` git pin so XML tools (agenda, messages, …) call `ensure_authenticated()` before the dispatcher POST (empty 200 without a login redirect)
-
-### Added
-
 - Claude Desktop `.mcpb` bundle (`manifest.json`, `scripts/build_mcpb.py`, MCPB workflow artifact). Configure asks for school, username, password, the child's birth date, and the child's name, and saves them once into `~/.config/smartschool/credentials.json` (Keychain on macOS) when that profile is not already stored. An existing profile wins. With no account, tools return a Dutch Configure message. The bundle vendors `markminnoye/smartschool` at `517de70`. The extension name is "Smartschool voor ouders", published by Sonic Rocket, with its own icon.
 - Dutch parent test guide: `docs/claude-desktop-test.md`
 - `get_children` — list linked children on Mijn kinderen (`POST /Studentcard/Student/getStudents` with XHR headers; topnav gotourl fills the current child's switch id when `accountID` is 0)
@@ -35,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `get_schedule` and `get_planned_elements` include planner element `id`, `description`, and `upload_folders`
 - `get_planner_attachments` / `download_planner_file` — list and download files attached to a planner item. The website `includes=upload-folders` query is sent; the JSON field names and the file download URL are **not live-verified** (fixtures at `smartschool@517de70` do not contain them). Download uses a same-host URL from that payload when one is present, otherwise GET-only guesses on the same host. `include_raw=true` returns key names and URL-like fields, without cookies or query strings.
 - `get_course_documents` / `download_course_document` — course Documenten via `TopNavCourses` + `FolderItem` (`/Documents/Index/Index/...` and `/Documents/Download/Index/...`, both in the library fixtures)
+
+### Changed
+
+- `get_schedule` uses the Planner calendar GET (no `types` filter) instead of the removed Schoolagenda XML. The MCP reads that JSON itself so element id, description, and upload folders are not dropped by `PlannedElement`
+- `get_planned_elements` matches that calendar GET by default; optional `types` and `includes` for sidebar subsets
+- Pin `smartschool` to `markminnoye/smartschool@517de70` (`planner-calendar-1to1`) until upstream merges Planner calendar
+- Bump `smartschool` git pin so XML tools (agenda, messages, …) call `ensure_authenticated()` before the dispatcher POST (empty 200 without a login redirect)
 
 ### Removed
 
@@ -100,6 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Claude Desktop integration via stdio transport
 - PyPI distribution and MCP Registry listing
 
-[Unreleased]: https://github.com/MauroDruwel/Smartschool-MCP/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/MauroDruwel/Smartschool-MCP/compare/v0.1.4...v0.2.0
-[0.1.4]: https://github.com/MauroDruwel/Smartschool-MCP/releases/tag/v0.1.4
+[Unreleased]: https://github.com/markminnoye/Smartschool-MCP/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/markminnoye/Smartschool-MCP/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/markminnoye/Smartschool-MCP/compare/v0.1.4...v0.2.0
+[0.1.4]: https://github.com/markminnoye/Smartschool-MCP/releases/tag/v0.1.4
