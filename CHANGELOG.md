@@ -1,141 +1,40 @@
-# Changelog
+# Wijzigingslog
 
-All notable changes to this project will be documented in this file.
+Alle belangrijke wijzigingen aan dit project staan in dit bestand.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+De opmaak volgt [Keep a Changelog](https://keepachangelog.com/nl/1.1.0/)
+en de versienummers volgen [Semantic Versioning](https://semver.org/lang/nl/).
 
-## [Unreleased]
+## [Niet uitgebracht]
 
-## [0.3.2] - 2026-11-23
+## [1.0.0] - 2026-11-23
 
-### Removed
+Eerste publieke versie van **Smartschool voor ouders**, de extensie voor Claude Desktop. De eerdere 0.x-testversies zijn ingetrokken. De extensie bouwt verder op de oorspronkelijke Smartschool MCP van Mauro Druwel en op de portaalbibliotheek [`svaningelgem/smartschool`](https://github.com/svaningelgem/smartschool), allebei met een MIT-licentie.
 
-- PyPI and MCP Registry publishing (`publish.yml`, `server.json`). The Claude Desktop `.mcpb` on GitHub Releases is the only distribution channel. A PyPI wheel cannot carry the pinned `smartschool` fork, so it would have installed a different library than the one tested.
+### Verspreiding
 
-### Security
+- Eén `.mcpb`-bestand per GitHub-release (`smartschool-mcp-<versie>.mcpb`), gebouwd door `mcpb.yml`. Er wordt niets op PyPI of in het MCP-register gepubliceerd. Het bestand bevat de vastgezette fork `markminnoye/smartschool`.
 
-- Downloads (`download_attachment`, `download_course_document`, `download_planner_file`, `download_homepage_image`) only write inside the download folder: `SMARTSCHOOL_DOWNLOAD_DIR`, default `~/Downloads/smartschool`. `save_path` is now a subfolder of it; paths outside it (absolute, `..`, symlinks) are refused. Files are created with `O_EXCL`, so an existing file or planted symlink is never written through.
-- HTTP transport binds `127.0.0.1` by default (was `0.0.0.0`). Single-user mode refuses a non-loopback host without `MCP_API_KEY`.
-- Universal mode: a rejected login blocks that username for 15 minutes in memory instead of writing a permanent `auth_failed` file. Anyone could otherwise lock a parent out of the server from the public login form. The form no longer shows the server's cache path.
-- Universal mode: an OAuth token without a Smartschool login is refused instead of falling back to the server's own account.
-- Lockout cache folders keep an unusual username inside one directory (no `/`, `\` or `..`).
-- Downloads refuse a Smartschool web page (expired session, login redirect) instead of saving it under the file's name.
-- CI pins every action to a commit SHA, installs with `uv sync --locked`.
+### Wat de extensie kan (alleen lezen)
 
-### Fixed
+- Lesrooster en planning uit Planner: `get_schedule`, `get_planned_elements`, `get_future_tasks`, met de bijlagen bij planneritems en het downloaden ervan.
+- Resultaten met de feedback van de leerkracht en, als de school ze deelt, het klasgemiddelde en de mediaan: `get_results`.
+- Berichten van de school, met zoeken en bijlagen: `get_messages`, `get_attachments`, `download_attachment`.
+- Documenten uit de vakken, periodes, rapporten, hulplinks en de blokken "in de kijker" op de startpagina.
+- Meerdere kinderen op één ouderaccount: `get_children` en `switch_child`, ook voor een kind op een andere school.
+- De Nederlandse prompts **ochtendbriefing** (overzicht van de dag) en **weekbriefing** (de komende schoolweek) in Claude Desktop.
+- Er wordt niets verstuurd, beantwoord of gewijzigd in Smartschool.
 
-- Claude Desktop rejected `ochtendbriefing` / `weekbriefing` with "Failed to attach prompt" because `prompts/get` returned different wording than the mcpb manifest template. The server now substitutes `${arguments.child}` into that exact template.
-- A network error during login (timeout, DNS, 5xx) no longer writes `auth_failed`. Only a rejected password locks.
-- Universal mode: stored logins live as long as the refresh token (24 h, renewed on refresh), so a client that refreshes after an idle hour no longer has to sign in again. Revoking the refresh token forgets the password.
-- `get_results` no longer fails as a whole when one row has no teacher.
-- `get_results` / `get_messages` check `limit` (1–200) and `offset`. An unknown `box_type` is an error instead of silently reading the inbox.
-- `get_messages` with `search_query` reads at most 50 message bodies and reports `body_search_truncated`.
-- Planner tools refuse a reversed date range or one longer than 400 days.
-- `uv.lock` records the package version again (it still said 0.2.0).
-- Tools no longer block the event loop. Each tool runs in a worker thread, one call at a time per Smartschool login; different logins (universal mode) run in parallel. The OAuth login form checks the password in a worker thread too.
+### Instellen en privacy
 
-## [0.3.1] - 2026-11-23
+- Het venster Configureren in Claude Desktop vraagt één keer naar school, gebruikersnaam, wachtwoord, de geboortedatum en de naam van je kind. Die gegevens komen in `~/.config/smartschool/credentials.json`; op een Mac gaan het wachtwoord en de geboortedatum naar de Sleutelhanger.
+- Eén poging met het wachtwoord: een geweigerde login schrijft `auth_failed` en wordt nooit opnieuw geprobeerd. Een netwerkfout blokkeert niets.
+- Downloads komen alleen in `~/Downloads/smartschool` (of `SMARTSCHOOL_DOWNLOAD_DIR`) en de submappen daarvan, overschrijven nooit een bestaand bestand en weigeren een loginpagina van Smartschool.
 
-### Added
+### Ook inbegrepen
 
-- MCP prompts `ochtendbriefing` and `weekbriefing` (Claude Desktop / MCP clients): Dutch daily standup and weekly overview that drive the existing Smartschool tools. Declared in `manifest.json` and registered with `@mcp.prompt()`.
+- Een Claude Code-plugin in `claude-plugin/` met de Nederlandse skill `daily-briefing` en scripts die alleen lezen.
+- Optioneel transport via Streamable HTTP: luistert standaard op `127.0.0.1` en vraagt `MCP_API_KEY` op elk ander adres. De universele OAuth-modus blokkeert een gebruikersnaam na een geweigerde login 15 minuten, in het geheugen.
 
-## [0.3.0] - 2026-11-23
-
-### Added
-
-- Claude Code plugin skill `daily-briefing` (`/smartschool:daily-briefing`): short Dutch weekday parent briefing from Smartschool (MCP tools when available, else plugin scripts). No family-specific ids or mail addresses; optional mail only when the user asks.
-- Publishing a GitHub Release builds `smartschool-mcp-<version>.mcpb` and attaches it to that release (version stamped from the tag into the Desktop manifest). PR builds still upload a temporary Actions artifact.
-- Claude Desktop `.mcpb` bundle (`manifest.json`, `scripts/build_mcpb.py`, MCPB workflow artifact). Configure asks for school, username, password, the child's birth date, and the child's name, and saves them once into `~/.config/smartschool/credentials.json` (Keychain on macOS) when that profile is not already stored. An existing profile wins. With no account, tools return a Dutch Configure message. The bundle vendors `markminnoye/smartschool` at `517de70`. The extension name is "Smartschool voor ouders", published by Sonic Rocket, with its own icon.
-- Dutch parent test guide: `docs/claude-desktop-test.md`
-- `get_children` — list linked children on Mijn kinderen (`POST /Studentcard/Student/getStudents` with XHR headers; topnav gotourl fills the current child's switch id when `accountID` is 0)
-- `switch_child(account_id)` — switch the session to another linked child (`GET /Studentcard/Chain/gotourl/accountID/{accountId}`); Planner/results then follow that child. Cross-school hops (De Ring `/otp/...`) are followed without replaying the original host.
-- Shared Smartschool account file `~/.config/smartschool/credentials.json` (or `$GROK_PLUGIN_DATA/credentials.json`) for the MCP server, the Claude plugin, and the Grok plugin path. Each profile's `children` list keeps `name` and, when known, the `account_id` and `platform` from `get_children`. Legacy `config.env` and `.env` accounts are copied in once when that file is missing
-- Claude Code plugin login guard: one attempt, `auth_failed` blockade, host pin, no mixed env/config credentials
-- Claude Code plugin under `claude-plugin/`: local skill and read-only scripts for login, agenda, berichten, and cijfers (one credential file, pinned `smartschool` library, no hosted MCP)
-- Read-only portal catalog smoke (`scripts/smoke_portal.py`): same `Smartschool` login+cookie session as the MCP, legacy library rows first, then HAR GETs. Writes/auth/unmapped XML POSTs are skipped; CI never runs it (`PORTAL_SMOKE=1` + `pytest -m integration`).
-- `get_attachments(message_id)` — list all attachments for a message (name, mime type, size, file ID)
-- `download_attachment(message_id, file_id, save_path?)` — download an attachment; defaults to `~/Downloads/smartschool/`, accepts optional `save_path`
-- `has_attachments` and `attachment_count` fields in every `get_messages` result
-- `get_schedule` and `get_planned_elements` include planner element `id`, `description`, and `upload_folders`
-- `get_planner_attachments` / `download_planner_file` — list and download files attached to a planner item. The website `includes=upload-folders` query is sent; the JSON field names and the file download URL are **not live-verified** (fixtures at `smartschool@517de70` do not contain them). Download uses a same-host URL from that payload when one is present, otherwise GET-only guesses on the same host. `include_raw=true` returns key names and URL-like fields, without cookies or query strings.
-- `get_course_documents` / `download_course_document` — course Documenten via `TopNavCourses` + `FolderItem` (`/Documents/Index/Index/...` and `/Documents/Download/Index/...`, both in the library fixtures)
-
-### Changed
-
-- `get_schedule` uses the Planner calendar GET (no `types` filter) instead of the removed Schoolagenda XML. The MCP reads that JSON itself so element id, description, and upload folders are not dropped by `PlannedElement`
-- `get_planned_elements` matches that calendar GET by default; optional `types` and `includes` for sidebar subsets
-- Pin `smartschool` to `markminnoye/smartschool@517de70` (`planner-calendar-1to1`) until upstream merges Planner calendar
-- Bump `smartschool` git pin so XML tools (agenda, messages, …) call `ensure_authenticated()` before the dispatcher POST (empty 200 without a login redirect)
-
-### Removed
-
-- Fly.io / Docker deploy scaffolding (Dockerfile, fly.toml, .dockerignore, docs/deploy-sonicrocket.md) — added prematurely in #3
-
-### Fixed
-
-- `download_planner_file` also GETs attachment routes built from `attachments[].id` (`/planner/api/v1/planned-assignments/{platformId}/{assignmentId}/attachments/{attachmentId}`, with and without `/download`, plus planned-elements variants) before the older `/files/` guesses. `include_raw=true` now includes each attachment's id, mimeType, and visibility, and still omits file names. `live_verified` stays false.
-- `download_course_document` keeps the filename from `Content-Disposition` when the download sends one, and otherwise adds an extension from the short Smartschool type (`pdf`, `docx`) or the real MIME type. An extension that is already present is not doubled.
-- `get_results` reads class average and median from the evaluation JSON itself. The library types `centralTendencies` as a list of strings, so object payloads used to fail validation and stay null. Strings, graphics, and fields such as `classAverage` / `gemiddelde` / `mediaan` are accepted. When the school hides the numbers they stay null. `include_raw=true` summarizes the first result's detail keys.
-- MCP server login uses the same one-try guard as the Claude plugin: one credential POST, then `~/.cache/smartschool/<subdomain>/<user>/auth_failed`. `/login?error=1` counts as failure. A later call does not send the password again.
-- `switch_child` follows the live Mijn kinderen chain from HAR: gotourl → `/otp/{token}` → relative `/Studentcard`. Foreign hops use a raw GET with browser navigation headers so the library cannot POST this account's password on `/login`. Cross-school `account-verification` may still run on a new device; TOTP stays blocked.
-- Claude Code plugin: an empty course list or empty body is not a login lockout; `/login?error=1` still writes `auth_failed`; a leading `https://` on `SMARTSCHOOL_MAIN_URL` is stripped; an expired message session exits with an error instead of an empty inbox; grade detail lookups re-raise authentication errors
-- Planner week fetch no longer fails when lesson payloads omit `canUserRestoreFromTrash` (`smartschool@517de70`)
-- `download_attachment` calls `session.get()` directly instead of the upstream library's `Attachment.download()`, which incorrectly base64-decodes a raw binary response (upstream bug)
-- Homepage HTML parsing falls back to BeautifulSoup when `smartschool.bs4_html` is present but cannot parse the response
-- `get_results` no longer fails the whole call when `graphic.percentage.color` is `blue` or another value outside the library enum (`green`, `red`, `olive`, `yellow`, `steel`, `grass`). Known colors stay enum members; unknown colors are kept as strings. The fork pin stays at `517de70` because this environment cannot push to `markminnoye/smartschool`.
-- `get_future_tasks` falls back to Planner `planned-assignments` (today through the next 366 days) when the legacy Agenda list is empty or unavailable, and keeps the date/course/task shape. De Pass stores Toets and Huistaak on the Planner calendar, not in `/Agenda/Futuretasks/getFuturetasks`.
-
-## [0.2.0] - 2026-03-25
-
-### Added
-
-- **Remote MCP support** via Streamable HTTP transport (`--transport streamable-http`)
-- `--host`, `--port` CLI flags with `MCP_HOST`, `MCP_PORT`, `MCP_TRANSPORT` env var counterparts
-- Optional Bearer-token authentication via `MCP_API_KEY` (`_BearerAuthMiddleware`)
-- CORS middleware — required for browser-based clients such as claude.ai
-- `get_schedule(date_offset)` — daily lesson schedule via `SmartschoolLessons`
-- `get_periods()` — academic terms/periods via `Periods`
-- `get_reports()` — report cards via `Reports`
-- `get_planned_elements(days_ahead)` — planner items via `PlannedElements`
-- `get_student_support_links()` — school support resources via `StudentSupportLinks`
-- `achieved_points`, `total_points`, `percentage` fields in `get_results`
-- `teacher` (from `gradebook_owner`, no extra API call) and `period` in `get_results`
-- `warning` field in `get_future_tasks` tasks
-- Lazy `_session()` singleton — session is created on first tool invocation, not at import time
-- Professional OSS infrastructure: CI workflow, issue/PR templates, CodeRabbitAI, pre-commit, tests
-
-### Changed
-
-- Updated `smartschool` dependency from personal fork (v0.5.0) to official library (`svaningelgem/smartschool` v0.8.0+)
-- Relaxed Python requirement from `>=3.13` to `>=3.10`
-- Modernized all type hints: replaced `typing.List/Dict/Optional` with built-in generics (`list`, `dict`, `str | None`)
-- `get_results`: teacher now read from `result.gradebook_owner` (always available); details fetch only used for central tendencies
-- `get_messages`: sender filter applied directly from headers (no full message fetch needed); body fetched lazily
-- `get_future_tasks`: fixed `course.course_title` (was incorrectly `course.name`)
-- Fixed `total_tasks` calculation (was counting dict keys, not tasks)
-- Fixed `result.availability_date` and `result.does_count` attribute names (camelCase → snake_case)
-- Fixed `teacher.name.starting_with_last_name` / `starting_with_first_name` attribute names
-- Fixed `header.unread` (was `header.read`)
-- Replaced removed `ResultDetail` class with lazy-loaded `result.details` property
-- Updated `publish.yml` to use `uv build` instead of legacy `python -m build` + pip
-
-### Removed
-
-- `ResultDetail` import (class removed in official smartschool library)
-
-## [0.1.4] - 2026-03-01
-
-### Added
-
-- Initial release with `get_courses`, `get_results`, `get_future_tasks`, `get_messages` tools
-- Claude Desktop integration via stdio transport
-- PyPI distribution and MCP Registry listing
-
-[Unreleased]: https://github.com/markminnoye/Smartschool-MCP/compare/v0.3.2...HEAD
-[0.3.2]: https://github.com/markminnoye/Smartschool-MCP/compare/v0.3.1...v0.3.2
-[0.3.1]: https://github.com/markminnoye/Smartschool-MCP/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/markminnoye/Smartschool-MCP/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/markminnoye/Smartschool-MCP/compare/v0.1.4...v0.2.0
-[0.1.4]: https://github.com/markminnoye/Smartschool-MCP/releases/tag/v0.1.4
+[Niet uitgebracht]: https://github.com/markminnoye/Smartschool-MCP/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/markminnoye/Smartschool-MCP/releases/tag/v1.0.0
