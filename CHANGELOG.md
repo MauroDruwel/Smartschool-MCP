@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Claude Desktop rejected `ochtendbriefing` / `weekbriefing` with "Failed to attach prompt" because `prompts/get` returned different wording than the mcpb manifest template. The server now substitutes `${arguments.child}` into that exact template.
 - A network error during login (timeout, DNS, 5xx) no longer writes `auth_failed`. Only a rejected password locks.
 - Universal mode: stored logins live as long as the refresh token (24 h, renewed on refresh), so a client that refreshes after an idle hour no longer has to sign in again. Revoking the refresh token forgets the password.
 - `get_results` no longer fails as a whole when one row has no teacher.
