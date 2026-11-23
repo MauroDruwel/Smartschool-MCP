@@ -318,7 +318,7 @@ def get_results(
                 result_data.update({"average": None, "median": None})
 
                 try:
-                    # details is a lazy-loaded property â€” fetches on first access
+                    # details is a lazy-loaded property — fetches on first access
                     detail = result.details
 
                     # Extract statistical information (central tendencies)
@@ -340,7 +340,7 @@ def get_results(
                             }
 
                 except Exception:
-                    # central_tendencies unavailable â€” keep default None values
+                    # central_tendencies unavailable — keep default None values
                     pass
 
             results_list.append(result_data)
@@ -587,7 +587,7 @@ def get_messages(
         except AttributeError:
             box_type_enum = BoxType.INBOX  # Default fallback
 
-        # Get message headers â€” headers already carry from_, subject, date, unread
+        # Get message headers — headers already carry from_, subject, date, unread
         all_headers = list(MessageHeaders(_session(), box_type=box_type_enum))
 
         # Apply sender filter directly from headers (no full message fetch needed)
@@ -1135,7 +1135,7 @@ def download_attachment(
 
     Files are saved to *save_path* when provided, otherwise to
     ~/Downloads/smartschool/.  The directory is created automatically.
-    Existing files are never overwritten â€” a counter suffix is appended
+    Existing files are never overwritten — a counter suffix is appended
     instead (e.g. ``report (1).pdf``).
 
     Args:
@@ -1180,7 +1180,7 @@ def download_attachment(
         filename = Path(raw_name).name or f"attachment_{file_id}"
         file_path = download_dir / filename
 
-        # Never overwrite â€” append a counter suffix
+        # Never overwrite — append a counter suffix
         counter = 1
         stem = file_path.stem
         while file_path.exists():
@@ -1227,7 +1227,7 @@ def get_homepage_blocks(include_html: bool = False) -> dict[str, Any]:
     Retrieve the "in de kijker" blocks pinned to the Smartschool homepage.
 
     Schools use these blocks for recurring content that is never sent as a
-    message and never lands in a document module â€” a monthly lunch menu
+    message and never lands in a document module — a monthly lunch menu
     ("Maandmenu"), a monthly calendar ("Maandkalender"), announcements. The
     content is frequently an embedded image rather than text, so ``images``
     is usually where the information actually lives.
@@ -1323,7 +1323,7 @@ def download_homepage_image(
         filename = Path(unquote(urlparse(image_url).path)).name or "homepage_image"
         file_path = download_dir / filename
 
-        # Never overwrite â€” append a counter suffix
+        # Never overwrite — append a counter suffix
         counter = 1
         stem = file_path.stem
         while file_path.exists():
