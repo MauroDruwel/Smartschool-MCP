@@ -22,7 +22,13 @@ Connect Claude (and other MCP clients) to your Smartschool account — ask about
 | `get_schedule` | Day schedule by offset (0 = today, 1 = tomorrow, …), from the agenda or the planner |
 | `get_periods` | Academic terms for the current school year |
 | `get_reports` | Available report cards |
-| `get_planned_elements` | Planner items for the next N days |
+| `get_planned_elements` | Planner items for the next N days: assignments, to-dos, events, days off, and the lessons that are an exam or a test (`is_exam`). Each item says whether it has more to show (`has_attachments`, `has_links`, `has_description`), in the same single request; `types` filter, `include_details` for the descriptions, attachments and links themselves |
+| `get_planned_element_details` | One planner item in full: description, attachments, links (weblinks, documents, Bookwidget titles) |
+| `download_planned_attachment` | Download an attachment of a planner item |
+| `get_course_documents` | Browse a course's Documenten folder by folder (or list the courses) |
+| `download_course_document` | Download a file from a course's Documenten |
+| `get_learning_paths` | List a course's leerpaden |
+| `get_learning_path` | Sections and steps of a leerpad, with the pupil's progress and the address of web links and Bookwidgets |
 | `get_student_support_links` | School support resources and links |
 | `get_student_notes` | Student file notes (Leerlingvolgsysteem), without confidential notes; details on request (`text`, `fields`, `date`, `choice`, `attachments` as name + mime) |
 | `get_student_absences` | Absences recorded in the Leerlingvolgsysteem (date, code, description, part of day) |

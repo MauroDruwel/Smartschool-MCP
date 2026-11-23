@@ -99,7 +99,7 @@ def test_get_reports_returns_error_on_exception() -> None:
 
 def test_get_planned_elements_returns_error_on_exception() -> None:
     with patch(
-        "smartschool_mcp.server.PlannedElements", side_effect=RuntimeError("oops")
+        "smartschool_mcp.server._planner_list", side_effect=RuntimeError("oops")
     ):
         result = srv.get_planned_elements()
     assert isinstance(result, dict)
