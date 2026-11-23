@@ -17,8 +17,9 @@ jobs:
   pack:
     name: Pack .mcpb
     runs-on: ubuntu-latest
+    # write needed to attach the asset on release:published; PR runs only upload artifacts
     permissions:
-      contents: ${{ github.event_name == 'release' && 'write' || 'read' }}
+      contents: write
     steps:
       - uses: actions/checkout@v7
 
