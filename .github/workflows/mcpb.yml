@@ -3,6 +3,8 @@ name: MCPB
 on:
   pull_request:
   workflow_dispatch:
+  release:
+    types: [published]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,6 +17,9 @@ jobs:
   pack:
     name: Pack .mcpb
     runs-on: ubuntu-latest
+    # write needed to attach the asset on release:published; PR runs only upload artifacts
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
 
@@ -29,11 +34,41 @@ jobs:
       - name: Install mcpb CLI
         run: npm install -g @anthropic-ai/mcpb@2.1.2
 
+      - name: Resolve bundle version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            RAW="${{ github.event.release.tag_name }}"
+          else
+            RAW="$(python3 -c 'import json; print(json.load(open("manifest.json"))["version"])')"
+          fi
+          VERSION="${RAW#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${RAW}" >> "$GITHUB_OUTPUT"
+          echo "Resolved mcpb version ${VERSION} (from ${RAW})"
+
       - name: Build the Claude Desktop bundle
-        run: python3 scripts/build_mcpb.py
+        run: |
+          python3 scripts/build_mcpb.py \
+            --version "${{ steps.version.outputs.version }}" \
+            --output "dist/smartschool-mcp-${{ steps.version.outputs.version }}.mcpb"
+          # Stable name for the Actions artifact / local unzip habit.
+          cp "dist/smartschool-mcp-${{ steps.version.outputs.version }}.mcpb" \
+            dist/smartschool-mcp.mcpb
 
       - uses: actions/upload-artifact@v7
         with:
           name: smartschool-mcp-mcpb
-          path: dist/smartschool-mcp.mcpb
+          path: |
+            dist/smartschool-mcp.mcpb
+            dist/smartschool-mcp-${{ steps.version.outputs.version }}.mcpb
           if-no-files-found: error
+
+      - name: Attach .mcpb to the GitHub Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ steps.version.outputs.tag }}" \
+            "dist/smartschool-mcp-${{ steps.version.outputs.version }}.mcpb" \
+            --clobber

@@ -2,17 +2,27 @@
 
 Dit is een test voor een ouder. Je downloadt één bestand, opent het in Claude Desktop, en vult daarna school, gebruikersnaam, wachtwoord, geboortedatum en de naam van je kind in. Dat doe je in het venster **Configure**. Je maakt zelf geen accountbestand aan.
 
-Elke nieuwe testbuild krijgt een hoger nummer, zodat Claude **Update** toont en de builds uit elkaar te houden zijn. De volgende is **0.3.0-rc.1**, daarna **0.3.0-rc.2**, enzovoort. Die naam staat bij de extensie.
+Elke nieuwe build krijgt een hoger versienummer, zodat Claude **Update** toont. Officiële versies (bijvoorbeeld **0.3.0**) staan op de GitHub Releases-pagina als `smartschool-mcp-0.3.0.mcpb`. Testbuilds vóór een release gebruiken **0.3.0-rc.1**, **0.3.0-rc.2**, enzovoort.
 
 ## 1. Het bestand downloaden
 
-Je zoekt een bestand dat eindigt op `.mcpb`. GitHub stopt dat bestand in een zip.
+Je zoekt een bestand dat eindigt op `.mcpb`.
+
+### Officiële release
+
+1. Open de [Releases](https://github.com/markminnoye/Smartschool-MCP/releases)-pagina.
+2. Kies de versie die je wilt.
+3. Download `smartschool-mcp-<versie>.mcpb` (bijvoorbeeld `smartschool-mcp-0.3.0.mcpb`).
+
+### Testbuild van een wijziging (PR)
+
+GitHub stopt dat bestand in een zip.
 
 1. Open de pagina van deze wijziging op GitHub (de link die je kreeg).
 2. Klik bovenaan op **Checks**.
 3. Klik op de regel **MCPB**.
 4. Onderaan de pagina, bij **Artifacts**, download je **smartschool-mcp-mcpb**.
-5. Dubbelklik de zip. Daarin zit `smartschool-mcp.mcpb`.
+5. Dubbelklik de zip. Daarin zit `smartschool-mcp.mcpb` en vaak ook `smartschool-mcp-<versie>.mcpb`.
 
 Bewaar dat `.mcpb`-bestand ergens waar je het terugvindt, bijvoorbeeld op het bureaublad.
 
@@ -107,3 +117,13 @@ Op Windows:
 4. Stel één testvraag.
 
 Heb je het wachtwoord al een paar keer op de Smartschool-website geprobeerd, dan kan de school het account zelf geblokkeerd hebben. Het bestand wissen maakt dat niet ongedaan. Neem contact op met de school en probeer het wachtwoord niet verder.
+
+## 6. Extra: bestandsnaam, plannerbijlage en klasgemiddelde
+
+| Wat je vraagt | Wat je verwacht |
+| --- | --- |
+| Sla dit vakdocument op. (`download_course_document`) | Het bestand in Downloads, map `smartschool`, heeft een extensie zoals `.pdf` of `.docx`. Ook als Smartschool de naam zonder extensie toont. |
+| Welke bestanden hangen aan die taak? (`get_planner_attachments`) Daarna: sla dat plannerbestand op. (`download_planner_file`) | Lukt het, dan staat het bestand in die map en zegt Claude welk pad werkte. Lukt het niet, dan komt een Nederlandse fout. Er komt geen leeg bestand. |
+| Toon de bijlagen van dat planneritem met include_raw op true. (`get_planner_attachments`) | Bij elke bijlage: id, bestandstype en zichtbaarheid, plus veldnamen en links. Geen bestandsnaam, geen cookies en geen wachtwoord. Vergelijk dat id met het file_id van de download. |
+| Wat zijn de laatste punten, met het klasgemiddelde en de mediaan? (`get_results`) | Gemiddelde en mediaan staan erbij als de school ze toont. Anders blijven ze leeg. Een school of leerkracht mag ze verbergen. |
+| Toon van het eerste cijfer de detailvelden, met include_raw op true. (`get_results`) | Je ziet of Smartschool die getallen meestuurt, aan de veldnamen. Geen cookies en geen namen. |
