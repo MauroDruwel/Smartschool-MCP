@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -198,6 +199,32 @@ def test_get_planned_elements_omits_types_by_default(mock_session: MagicMock) ->
     data = mock_session.json.call_args.kwargs["data"]
     assert "types" not in data
     assert "includes" not in data
+
+
+def test_calendar_element_reads_free_text_and_room_locations() -> None:
+    from smartschool_mcp.planner_fields import calendar_element_dict
+
+    raw = _planner_raw(
+        locations=[
+            {"type": "mini-db-item", "title": "A12"},
+            {"type": "text", "text": "thuis"},
+            {"type": "mystery"},
+        ]
+    )
+    row = calendar_element_dict(raw)
+    assert row["locations"] == ["A12", "thuis"]
+
+
+def test_planned_element_model_rejects_raw_calendar_fixture() -> None:
+    """0.13.0 PlannedElement requires fields the website calendar omits.
+
+    get_schedule therefore keeps the raw JSON parser in planner_fields.
+    """
+    from pydantic import ValidationError
+    from smartschool import PlannedElement
+
+    with pytest.raises(ValidationError):
+        PlannedElement(**_planner_raw())
 
 
 def test_get_planned_elements_passes_types_and_includes(
@@ -1379,16 +1406,21 @@ def _evaluation_payload(
 
 
 def test_percentage_graphic_keeps_blue_and_unknown_colors() -> None:
-    """SR-93: blue and any other unknown color must not fail validation."""
+    """SR-93: blue and any other unknown color must not fail validation.
+
+    smartschool>=0.11.1 lists ``blue`` and turns an unknown color into an
+    ad-hoc ``GraphicColor`` member (with a warning) instead of failing.
+    """
     blue = PercentageGraphic(
         type="percentage", color="blue", value=80, description="8/10"
     )
-    assert blue.color == "blue"
-    assert not isinstance(blue.color, GraphicColor)
+    assert isinstance(blue.color, GraphicColor)
+    assert blue.color == GraphicColor.BLUE
 
     purple = PercentageGraphic(
         type="percentage", color="purple", value=50, description="5/10"
     )
+    assert isinstance(purple.color, GraphicColor)
     assert purple.color == "purple"
 
     green = PercentageGraphic(
@@ -1398,7 +1430,8 @@ def test_percentage_graphic_keeps_blue_and_unknown_colors() -> None:
     assert green.color == GraphicColor.GREEN
 
     letter = TextGraphic(type="text", color="blue", value="B", description="letter")
-    assert letter.color == "blue"
+    assert isinstance(letter.color, GraphicColor)
+    assert letter.color == GraphicColor.BLUE
 
 
 def test_get_results_accepts_blue_and_unknown_graphic_colors(
@@ -1516,7 +1549,8 @@ def test_get_future_tasks_falls_back_to_planned_assignments() -> None:
     assert second["courses"][0]["name"] == "Frans"
     assert second["courses"][0]["tasks"][0]["description"] == "En classe"
     kwargs = mock_planned.call_args.kwargs
-    assert kwargs["types"] == "planned-assignments"
+    assert kwargs["element_types"] == "planned-assignments"
+    assert "types" not in kwargs
     assert kwargs["from_date"] == today
     assert kwargs["till_date"] == today + timedelta(days=srv._FUTURE_TASKS_HORIZON_DAYS)
 
@@ -1928,3 +1962,64 @@ def test_download_attachment_refuses_login_page(download_root) -> None:
         result = srv.download_attachment(999, 42)
     assert "web page instead of the file" in result["error"]
     assert not list(download_root.iterdir())
+
+
+def _feedback_with_object_attachments(row: dict[str, Any]) -> dict[str, Any]:
+    """De Pass: feedback attachments arrive as objects, not as id strings."""
+    person = row["gradebookOwner"]
+    row["feedbacks"] = [
+        {
+            "attachments": [
+                {"id": "242e6d17-2a8a-4a6e-9c1b-0000000cf7fd", "wopiUrl": None},
+                {"id": "58ece3d2-74a8-4420-8f1c-000000096d33", "wopiUrl": None},
+                "plain-id-still-works",
+            ],
+            "changedAt": "2026-11-17T10:00:00+01:00",
+            "createdAt": "2026-11-17T10:00:00+01:00",
+            "evaluationId": row["identifier"],
+            "id": "fb-1",
+            "student": person,
+            "teacher": person,
+            "text": "Goed gedaan",
+        }
+    ]
+    row["feedback"] = [{"text": "Goed gedaan", "user": person}]
+    return row
+
+
+def test_get_results_accepts_feedback_attachment_objects(
+    mock_session: MagicMock,
+) -> None:
+    """One feedback with ``{"id", "wopiUrl"}`` attachments failed every call."""
+    mock_session.json.return_value = [
+        _feedback_with_object_attachments(
+            _evaluation_payload(color="green", name="Met bijlagen", description="9/10")
+        ),
+        _evaluation_payload(color="green", name="Zonder bijlagen", description="7/10"),
+    ]
+
+    result = srv.get_results(include_details=False)
+
+    assert "error" not in result, result
+    by_name = {row["assignment"]: row for row in result["results"]}
+    assert set(by_name) == {"Met bijlagen", "Zonder bijlagen"}
+    assert by_name["Met bijlagen"]["feedback"] == "Goed gedaan"
+    assert by_name["Met bijlagen"]["feedback_attachment_ids"] == [
+        "242e6d17-2a8a-4a6e-9c1b-0000000cf7fd",
+        "58ece3d2-74a8-4420-8f1c-000000096d33",
+        "plain-id-still-works",
+    ]
+    assert by_name["Zonder bijlagen"]["feedback_attachment_ids"] == []
+
+
+def test_feedback_patch_reaches_every_model_that_embeds_it() -> None:
+    from smartschool._objects import FeedbackFull, ProjectGoal, Result, ResultDetails
+
+    from smartschool_mcp.result_feedback import attachment_ids
+
+    for cls in (FeedbackFull, ProjectGoal, ResultDetails, Result):
+        assert "attachment_ids" in repr(cls.__pydantic_core_schema__), cls
+    assert attachment_ids([{"id": "a", "wopiUrl": None}, "b", {"wopiUrl": "x"}]) == [
+        "a",
+        "b",
+    ]

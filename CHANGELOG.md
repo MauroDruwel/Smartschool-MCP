@@ -7,6 +7,21 @@ en de versienummers volgen [Semantic Versioning](https://semver.org/lang/nl/).
 
 ## [Niet uitgebracht]
 
+### Gewijzigd
+
+- De MCP gebruikt nu de gewone `smartschool`-bibliotheek 0.13.0 van PyPI in plaats van onze eigen fork (`markminnoye/smartschool@517de70`). Daarmee komen de verbeteringen van de afgelopen maanden mee: opnieuw inloggen als een sessie verlopen is, projectresultaten die niet meer mislukken, alle kleuren van cijfers (ook blauw) en een duidelijke fout in plaats van een lege lijst als Smartschool een fout teruggeeft.
+- De Claude Desktop-bundel (`.mcpb`) bevat de bibliotheek niet meer zelf; uv installeert ze bij de installatie van PyPI.
+- Cookies en de opgeslagen gebruiker staan nu in dezelfde map als het `auth_failed`-bestand (`~/.cache/smartschool/<school>/<gebruiker>`). Na de update meldt de MCP zich daarom één keer opnieuw aan.
+
+### Opgelost
+
+- Lessen en taken met een vrij getypte plaats (bijvoorbeeld "thuis") tonen die plaats nu in het rooster en de planner, zowel in de MCP als in de Claude-plugin. Vroeger viel die plaats weg of verscheen er onleesbare tekst.
+- `get_results` gaf bij De Pass bij elke oproep een fout zodra één leerkracht bijlagen bij de feedback had gezet: Smartschool stuurt die bijlagen als object (`{"id", "wopiUrl"}`), de bibliotheek verwacht tekst. De MCP zet ze nu om naar hun id, en elk resultaat toont die ids in `feedback_attachment_ids`.
+
+### Verwijderd
+
+- De eigen kleurenpatch voor cijfers: de bibliotheek aanvaardt nu zelf elke kleur.
+
 ## [1.0.0] - 2026-11-23
 
 Eerste publieke versie van **Smartschool voor ouders**, de extensie voor Claude Desktop. De eerdere 0.x-testversies zijn ingetrokken. De extensie bouwt verder op de oorspronkelijke Smartschool MCP van Mauro Druwel en op de portaalbibliotheek [`svaningelgem/smartschool`](https://github.com/svaningelgem/smartschool), allebei met een MIT-licentie.
