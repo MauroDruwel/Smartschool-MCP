@@ -639,7 +639,7 @@ class TestLoginHandlers:
                 "school": "school.smartschool.be",
                 "username": "john",
                 "password": "wrong",
-                "mfa": "",
+                "mfa": "2000-01-01",
             }
         )
 
@@ -679,3 +679,27 @@ class TestLoginHandlers:
         assert response.status_code == 302
         assert "code=code-123" in response.headers["location"]
         assert "state=state123" in response.headers["location"]
+
+
+@pytest.mark.asyncio
+async def test_handle_login_post_refuses_an_unusable_birth_date() -> None:
+    """A typo in the birth date must not cost a Smartschool login attempt."""
+    provider = MagicMock()
+    provider.get_pending_auth.return_value = object()
+    request = MagicMock()
+    request.form = AsyncMock(
+        return_value={
+            "pending": "abc",
+            "school": "school.smartschool.be",
+            "username": "john",
+            "password": "secret",
+            "mfa": "31/02/2012",
+        }
+    )
+
+    with patch("smartschool_mcp.auth.Smartschool") as mock_session:
+        response = await _handle_login_post(request, provider)
+
+    mock_session.assert_not_called()
+    assert response.status_code == 200
+    assert "YYYY-MM-DD" in response.body.decode()

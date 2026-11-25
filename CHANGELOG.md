@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Smartschool settings are checked before the first login, so a typo no longer costs a login attempt (Smartschool locks an account after a few). `SMARTSCHOOL_MAIN_URL` is tidied to a bare host: spaces, `https://` and a path are dropped, and a bare subdomain gets `.smartschool.be`. `SMARTSCHOOL_MFA` must be a real birth date (`YYYY-MM-DD`; day-first `04/03/2012` is converted) or a TOTP secret. The error names the setting and never repeats the password or answer. The universal-mode login form checks the birth date the same way
 - `get_schedule` and `get_future_tasks` read the planner when the legacy agenda is empty, as it is at schools that moved to the planner: the timetable comes from the `planned-lessons`, `planned-placeholders` and `planned-lesson-cluster-moments` elements, the tasks from `planned-assignments` and `planned-to-dos`. Both results carry `source` (`"agenda"` or `"planner"`); when the planner can't be read, the agenda's result comes back with `planner_error`
 
 ### Changed
