@@ -10,7 +10,7 @@ import pytest
 from mcp.server.auth.provider import AuthorizationParams
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl
-from smartschool import AppCredentials
+from smartschool import AppCredentials, SmartSchoolAuthenticationError
 from starlette.responses import Response
 
 from smartschool_mcp.auth import (
@@ -25,6 +25,7 @@ from smartschool_mcp.auth import (
     get_credentials,
     login_routes,
 )
+from smartschool_mcp.guard import memory_lockout_message
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -643,7 +644,9 @@ class TestLoginHandlers:
             }
         )
 
-        with patch("smartschool_mcp.auth.Smartschool", side_effect=RuntimeError("bad")):
+        with patch(
+            "smartschool_mcp.auth.MemoryGuardedSession", side_effect=RuntimeError("bad")
+        ):
             response = await _handle_login_post(request, provider)
 
         assert response.status_code == 200
@@ -673,9 +676,73 @@ class TestLoginHandlers:
         mock_session = MagicMock()
         mock_session.get.return_value = object()
 
-        with patch("smartschool_mcp.auth.Smartschool", return_value=mock_session):
+        with patch(
+            "smartschool_mcp.auth.MemoryGuardedSession", return_value=mock_session
+        ):
             response = await _handle_login_post(request, provider)
 
         assert response.status_code == 302
         assert "code=code-123" in response.headers["location"]
         assert "state=state123" in response.headers["location"]
+
+    @pytest.mark.asyncio
+    async def test_handle_login_post_refuses_a_locked_out_user(self) -> None:
+        """After a rejected password the public form sends nothing for a while."""
+        provider = MagicMock()
+        provider.get_pending_auth.return_value = object()
+        request = MagicMock()
+        request.form = AsyncMock(
+            return_value={
+                "pending": "abc",
+                "school": "school.smartschool.be",
+                "username": "john",
+                "password": "guess",
+                "mfa": "",
+            }
+        )
+
+        with (
+            patch("smartschool_mcp.auth.memory_lockout_active", return_value=True),
+            patch("smartschool_mcp.auth.MemoryGuardedSession") as mock_session,
+        ):
+            response = await _handle_login_post(request, provider)
+
+        mock_session.assert_not_called()
+        provider.complete_authorization.assert_not_called()
+        assert response.status_code == 200
+        assert "minutes" in response.body.decode()
+
+    @pytest.mark.asyncio
+    async def test_handle_login_post_shows_the_lockout_after_a_rejection(
+        self,
+    ) -> None:
+        provider = MagicMock()
+        provider.get_pending_auth.return_value = object()
+        request = MagicMock()
+        request.form = AsyncMock(
+            return_value={
+                "pending": "abc",
+                "school": "school.smartschool.be",
+                "username": "john",
+                "password": "wrong",
+                "mfa": "",
+            }
+        )
+        rejected = MagicMock()
+        rejected.get.side_effect = SmartSchoolAuthenticationError(
+            memory_lockout_message()
+        )
+
+        with (
+            patch("smartschool_mcp.auth.MemoryGuardedSession", return_value=rejected),
+            # Not locked out before the attempt; the guard locked it after.
+            patch(
+                "smartschool_mcp.auth.memory_lockout_active",
+                side_effect=[False, True],
+            ),
+        ):
+            response = await _handle_login_post(request, provider)
+
+        provider.complete_authorization.assert_not_called()
+        assert response.status_code == 200
+        assert "minutes" in response.body.decode()

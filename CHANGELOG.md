@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A password Smartschool rejected is no longer posted again. The `smartschool` library retries a failed login up to three times per session, and a new session is built every `SESSION_TTL_SECONDS`, so a wrong password soon locked the Smartschool account. In stdio mode the first rejection (password or birth date) writes `auth_failed` next to the session's cookie cache and every later call refuses until that file is deleted; network errors do not count. In universal mode the lockout is kept in memory for 15 minutes per username and school, so the public login form cannot lock someone out for good. Credentials are only posted to the school's own host over https
 - `get_schedule` and `get_future_tasks` read the planner when the legacy agenda is empty, as it is at schools that moved to the planner: the timetable comes from the `planned-lessons`, `planned-placeholders` and `planned-lesson-cluster-moments` elements, the tasks from `planned-assignments` and `planned-to-dos`. Both results carry `source` (`"agenda"` or `"planner"`); when the planner can't be read, the agenda's result comes back with `planner_error`
 
 ### Changed
