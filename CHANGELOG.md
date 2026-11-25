@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `docs/portal-api/`: an inventory of the Smartschool website's own calls (method, path, query and body keys; no values) with the `smartschool` class and MCP tool that cover each, a gap list for the library, and a playbook for extending it from a browser capture. `docs/portal-api/raw/` is gitignored
 - `get_student_notes(limit?, offset?, category?, since?, include_details?)` — student file notes ("dossierlijnen", Leerlingvolgsysteem); confidential notes are never returned, details only on request. With `include_details`, each note's `details` holds `text` (plain text), `fields`, `date`, `choice` (the label of the note's select field, e.g. the measure of an order measure) and `attachments` (a list of `{name, mime}`)
 - `get_student_absences(since?)` — absences recorded in the Leerlingvolgsysteem (`part_of_day` is `null` when not specified)
 - Both tools return `{"error": ...}` ("the student file (LVS) is not available for this account") when Smartschool rejects the request, e.g. for an account without the LVS module
