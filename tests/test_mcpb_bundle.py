@@ -67,8 +67,20 @@ def test_staged_bundle_holds_the_package_and_the_lockfile(tmp_path: Path) -> Non
 
     build_mcpb.stage_bundle(staging)
 
-    for name in ("manifest.json", "pyproject.toml", "uv.lock", "README.md", "LICENSE"):
+    for name in (
+        "manifest.json",
+        "icon.png",
+        "pyproject.toml",
+        "uv.lock",
+        "README.md",
+        "LICENSE",
+    ):
         assert (staging / name).is_file(), name
+    manifest = _manifest()
+    assert manifest["icon"] == "icon.png"
+    assert manifest["icons"]
+    for entry in manifest["icons"]:
+        assert (staging / entry["src"]).is_file(), entry["src"]
     assert (staging / "smartschool_mcp" / "server.py").is_file()
     assert not list(staging.rglob("__pycache__"))
     assert not (staging / "tests").exists()

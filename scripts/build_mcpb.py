@@ -25,7 +25,14 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # Copied into the bundle next to the package. pyproject.toml names README.md
 # as its readme, so uv needs it to build the project on the user's machine.
-BUNDLE_FILES = ("manifest.json", "pyproject.toml", "uv.lock", "README.md", "LICENSE")
+BUNDLE_FILES = (
+    "manifest.json",
+    "icon.png",
+    "pyproject.toml",
+    "uv.lock",
+    "README.md",
+    "LICENSE",
+)
 
 _VERSION_RE = re.compile(
     r"[0-9]+(?:\.[0-9]+)*(?:[-+.]?[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?"
@@ -62,6 +69,7 @@ def stage_bundle(dest: Path, *, version: str | None = None) -> str:
     dest.mkdir(parents=True)
     for name in BUNDLE_FILES:
         shutil.copy2(ROOT / name, dest / name)
+    shutil.copytree(ROOT / "assets", dest / "assets", ignore=_ignore)
     shutil.copytree(ROOT / "smartschool_mcp", dest / "smartschool_mcp", ignore=_ignore)
 
     manifest_path = dest / "manifest.json"

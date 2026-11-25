@@ -2,6 +2,39 @@
   "manifest_version": "0.4",
   "name": "smartschool-mcp",
   "display_name": "Smartschool",
+  "icon": "icon.png",
+  "icons": [
+    {
+      "src": "assets/icons/icon-48-light.png",
+      "size": "48x48",
+      "theme": "light"
+    },
+    {
+      "src": "assets/icons/icon-128-light.png",
+      "size": "128x128",
+      "theme": "light"
+    },
+    {
+      "src": "assets/icons/icon-512-light.png",
+      "size": "512x512",
+      "theme": "light"
+    },
+    {
+      "src": "assets/icons/icon-48-dark.png",
+      "size": "48x48",
+      "theme": "dark"
+    },
+    {
+      "src": "assets/icons/icon-128-dark.png",
+      "size": "128x128",
+      "theme": "dark"
+    },
+    {
+      "src": "assets/icons/icon-512-dark.png",
+      "size": "512x512",
+      "theme": "dark"
+    }
+  ],
   "version": "0.3.0",
   "description": "Courses, grades, planner, tasks, messages and documents from Smartschool.",
   "long_description": "Lets Claude read your Smartschool portal: the timetable and planner (tests, assignments, what to bring), results with the teacher's feedback, messages and their attachments, course documents and leerpaden, notes and absences from the pupil file.\n\nClaude only reads. Nothing is sent, answered or changed in Smartschool.\n\nSet up: fill in your school's Smartschool address, your username and password, and the birth date Smartschool asks for (on a parent account, your child's; or a 2FA secret). Your credentials stay on your computer; what Claude looks up appears in your conversation.",
