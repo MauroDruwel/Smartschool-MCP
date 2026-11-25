@@ -76,6 +76,16 @@ def stage_bundle(dest: Path, *, version: str | None = None) -> str:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if version is not None:
         manifest["version"] = normalize_version(version)
+        # The server reports __version__ to the client: keep it equal.
+        init = dest / "smartschool_mcp" / "__init__.py"
+        init.write_text(
+            re.sub(
+                r'(?m)^__version__ = "[^"]*"$',
+                f'__version__ = "{manifest["version"]}"',
+                init.read_text(encoding="utf-8"),
+            ),
+            encoding="utf-8",
+        )
         manifest_path.write_text(
             json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",

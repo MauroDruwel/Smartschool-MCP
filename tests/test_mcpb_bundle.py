@@ -94,6 +94,8 @@ def test_staging_stamps_the_release_version(tmp_path: Path) -> None:
     assert stamped == "9.8.7"
     data = json.loads((staging / "manifest.json").read_text(encoding="utf-8"))
     assert data["version"] == "9.8.7"
+    init = (staging / "smartschool_mcp" / "__init__.py").read_text(encoding="utf-8")
+    assert '__version__ = "9.8.7"' in init
 
 
 @pytest.mark.parametrize("bad", ["", "v", "1.0; rm -rf /", "../1.0"])
