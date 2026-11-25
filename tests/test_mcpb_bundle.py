@@ -58,7 +58,7 @@ def test_password_is_masked_and_birth_date_shown() -> None:
     assert user_config["password"]["sensitive"] is True
     # Shown, not masked: a typo in the birth date costs a login attempt.
     assert user_config["mfa"].get("sensitive") is not True
-    assert "YYYY-MM-DD" in user_config["mfa"]["title"]
+    assert "dd-mm-yyyy" in user_config["mfa"]["title"]
     assert user_config["school"].get("sensitive") is not True
 
 

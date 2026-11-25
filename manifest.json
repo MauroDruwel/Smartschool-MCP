@@ -146,8 +146,8 @@
     },
     "mfa": {
       "type": "string",
-      "title": "Birth date (YYYY-MM-DD)",
-      "description": "The birth date Smartschool asks for after the password; on a parent account, your child's birth date. With 2FA, enter the TOTP secret instead.",
+      "title": "Birth date (dd-mm-yyyy)",
+      "description": "The birth date Smartschool asks for after the password, e.g. 12-11-2014; on a parent account, your child's birth date. With 2FA, enter the TOTP secret instead.",
       "required": true
     }
   },
