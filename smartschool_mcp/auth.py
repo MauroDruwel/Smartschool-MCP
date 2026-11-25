@@ -30,10 +30,17 @@ from mcp.server.auth.provider import (
     construct_redirect_uri,
 )
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
-from smartschool import AppCredentials, Smartschool
+from smartschool import AppCredentials
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 from starlette.routing import Route
+
+from smartschool_mcp.guard import (
+    MemoryGuardedSession,
+    memory_lockout_active,
+    memory_lockout_message,
+)
+from smartschool_mcp.settings import SettingsError, verification_answer
 
 _logger = logging.getLogger(__name__)
 
@@ -552,21 +559,50 @@ async def _handle_login_post(
             mfa=mfa,
         )
 
+    # A password Smartschool rejected a moment ago is not tried again: the
+    # form is public, and repeated failures lock the real account.
+    if memory_lockout_active(username, school):
+        return _render_login_form(
+            pending_id,
+            error=memory_lockout_message(),
+            school=school_raw,
+            username=username,
+            mfa=mfa,
+        )
+
+    # A typo in the birth date must not cost a Smartschool login attempt.
+    try:
+        answer = verification_answer(mfa)
+    except SettingsError:
+        return _render_login_form(
+            pending_id,
+            error="Birth date must be dd-mm-yyyy (or enter your 2FA secret).",
+            school=school_raw,
+            username=username,
+            mfa=mfa,
+        )
+
     # Validate credentials by attempting a Smartschool login
     creds = AppCredentials(
-        username=username, password=password, main_url=school, mfa=mfa
+        username=username, password=password, main_url=school, mfa=answer
     )
     try:
-        session = Smartschool(creds)
+        session = MemoryGuardedSession(creds)
         # Force an actual request to verify the credentials work
         session.get("/?module=Messages&file=messageOverview")
     except Exception:
         _logger.debug(
             "Smartschool login failed for user=%s school=%s", username, school
         )
+        # The guard remembers a rejected password; say how long it waits.
+        error = (
+            memory_lockout_message()
+            if memory_lockout_active(username, school)
+            else "Login failed — check your school URL, username, and password."
+        )
         return _render_login_form(
             pending_id,
-            error="Login failed — check your school URL, username, and password.",
+            error=error,
             school=school_raw,
             username=username,
             mfa=mfa,

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `get_children()` and `switch_child(account_id, birth_date?)` — Mijn kinderen: list the children linked to a parent login and switch the session to one of them, also when that child is on another school platform. That school asks for the child's birth date (dd-mm-yyyy); it is sent once, never together with the password, and kept in a private `children.json` next to the session cache once accepted. The login's password is only ever posted to the login's own school
 - `get_student_notes(limit?, offset?, category?, since?, include_details?)` — student file notes ("dossierlijnen", Leerlingvolgsysteem); confidential notes are never returned, details only on request. With `include_details`, each note's `details` holds `text` (plain text), `fields`, `date`, `choice` (the label of the note's select field, e.g. the measure of an order measure) and `attachments` (a list of `{name, mime}`)
 - `get_student_absences(since?)` — absences recorded in the Leerlingvolgsysteem (`part_of_day` is `null` when not specified)
 - Both tools return `{"error": ...}` ("the student file (LVS) is not available for this account") when Smartschool rejects the request, e.g. for an account without the LVS module
@@ -20,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A password Smartschool rejected is no longer posted again. The `smartschool` library retries a failed login up to three times per session, and a new session is built every `SESSION_TTL_SECONDS`, so a wrong password soon locked the Smartschool account. In stdio mode the first rejection (password or birth date) writes `auth_failed` next to the session's cookie cache and every later call refuses until that file is deleted; network errors do not count. In universal mode the lockout is kept in memory for 15 minutes per username and school, so the public login form cannot lock someone out for good. Credentials are only posted to the school's own host over https
+- Smartschool settings are checked before the first login, so a typo no longer costs a login attempt (Smartschool locks an account after a few). `SMARTSCHOOL_MAIN_URL` is tidied to a bare host: spaces, `https://` and a path are dropped, and a bare subdomain gets `.smartschool.be`. `SMARTSCHOOL_MFA` must be a real birth date (`YYYY-MM-DD`; day-first `04/03/2012` is converted) or a TOTP secret. The error names the setting and never repeats the password or answer. The universal-mode login form checks the birth date the same way
 - `get_schedule` and `get_future_tasks` read the planner when the legacy agenda is empty, as it is at schools that moved to the planner: the timetable comes from the `planned-lessons`, `planned-placeholders` and `planned-lesson-cluster-moments` elements, the tasks from `planned-assignments` and `planned-to-dos`. Both results carry `source` (`"agenda"` or `"planner"`); when the planner can't be read, the agenda's result comes back with `planner_error`
 
 ### Changed
