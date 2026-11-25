@@ -152,7 +152,10 @@ class GuardedSession(Smartschool):
 
     def _assert_credential_target(self, url: str) -> None:
         parsed = urlparse(url)
-        expected = _school_host(self._credentials().main_url)
+        # After a switch to a child on another school (children.switch), the
+        # session points there; the password still belongs to the home school.
+        home = self.__dict__.get("_home_host") or self._credentials().main_url
+        expected = _school_host(str(home))
         actual = (parsed.hostname or "").lower()
         if parsed.scheme != "https" or actual != expected:
             raise SmartSchoolAuthenticationError(

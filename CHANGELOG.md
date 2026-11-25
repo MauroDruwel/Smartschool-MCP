@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `get_children()` and `switch_child(account_id, birth_date?)` — Mijn kinderen: list the children linked to a parent login and switch the session to one of them, also when that child is on another school platform. That school asks for the child's birth date (dd-mm-yyyy); it is sent once, never together with the password, and kept in a private `children.json` next to the session cache once accepted. The login's password is only ever posted to the login's own school
 - `get_student_notes(limit?, offset?, category?, since?, include_details?)` — student file notes ("dossierlijnen", Leerlingvolgsysteem); confidential notes are never returned, details only on request. With `include_details`, each note's `details` holds `text` (plain text), `fields`, `date`, `choice` (the label of the note's select field, e.g. the measure of an order measure) and `attachments` (a list of `{name, mime}`)
 - `get_student_absences(since?)` — absences recorded in the Leerlingvolgsysteem (`part_of_day` is `null` when not specified)
 - Both tools return `{"error": ...}` ("the student file (LVS) is not available for this account") when Smartschool rejects the request, e.g. for an account without the LVS module

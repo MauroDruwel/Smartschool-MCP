@@ -42,7 +42,7 @@ from smartschool import (
     TopNavCourses,
 )
 
-from smartschool_mcp import content
+from smartschool_mcp import children, content
 from smartschool_mcp.guard import GuardedSession, MemoryGuardedSession
 from smartschool_mcp.settings import env_credentials
 
@@ -1410,6 +1410,59 @@ def get_learning_path(
         }
     except Exception as e:
         return {"error": f"Failed to retrieve learning path: {e!s}"}
+
+
+@mcp.tool()
+def get_children() -> dict[str, Any]:
+    """
+    List the children linked on Mijn kinderen for this (parent) login.
+
+    Use ``account_id`` with switch_child to change whose planner, results and
+    messages the other tools return; the session stays on the selected child.
+
+    When the user asks for a child that is not in ``children``, that child is
+    not linked on Mijn kinderen and cannot be read from this login. Do not
+    guess an id, and do not ask for a school, address, username or password.
+    A listed child on another school needs no address either: switch_child
+    follows the link and only asks for that child's birth date.
+
+    Returns:
+        Dictionary with ``children`` (account_id, name, first_name,
+        last_name, class_name, is_current), ``current`` (the active user) and
+        ``total``.
+    """
+    try:
+        return children.list_children(_session())
+    except Exception as e:
+        return {"error": f"Failed to retrieve children: {e!s}"}
+
+
+@mcp.tool()
+def switch_child(account_id: str, birth_date: str | None = None) -> dict[str, Any]:
+    """
+    Switch the session to another child linked on Mijn kinderen.
+
+    After a successful switch, get_schedule, get_planned_elements,
+    get_results, get_messages and the other tools follow that child. A child
+    on another school platform is reached through that school's one-time
+    link; that school then asks for the birth date of the child. Pass it as
+    ``birth_date``: it is sent once, never together with the password, and
+    stored once accepted, so it is asked for only the first time.
+
+    Args:
+        account_id: ``account_id`` from get_children.
+        birth_date: Birth date of that child, dd-mm-yyyy. Only needed for a
+            child on another school when switch_child asks for it.
+
+    Returns:
+        Dictionary with ``ok``, the new ``current`` user, ``switched_host``
+        when the child is on another school, and ``saved_birth_date`` when a
+        new birth date was stored.
+    """
+    try:
+        return children.switch(_session(), account_id, birth_date)
+    except Exception as e:
+        return {"error": f"Failed to switch child: {e!s}"}
 
 
 @mcp.tool()

@@ -370,3 +370,25 @@ def test_rejected_birthday_logs_the_verification_page(
     assert "verification" in caplog.text
     assert "/account-verification" in caplog.text
     assert "1999-12-31" not in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# After switching to a child on another school, the password stays home
+# ---------------------------------------------------------------------------
+
+
+def test_password_stays_on_the_home_school_after_a_child_switch() -> None:
+    """A switched session whose cookie expires must not post the password at
+    the other school: it belongs to the school this login is from."""
+    fake = FakeSmartschool(login_host="school-b.smartschool.be")
+    session = _session(guard.GuardedSession, fake)
+    # What children.switch does when the child is on another school.
+    session.__dict__["_home_host"] = HOST
+    object.__setattr__(session.creds, "main_url", "school-b.smartschool.be")
+    session.__dict__.pop("_url", None)
+
+    with pytest.raises(SmartSchoolAuthenticationError, match="not posted"):
+        session.get("/")
+
+    assert fake.password_posts == 0
+    assert not guard.auth_failed_path(session).exists()
