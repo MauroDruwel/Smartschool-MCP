@@ -21,6 +21,7 @@ redirect elsewhere never receives the password.
 
 from __future__ import annotations
 
+import logging
 import threading
 from pathlib import Path
 from typing import NoReturn
@@ -31,6 +32,8 @@ from cachetools import TTLCache
 from smartschool import Credentials, Smartschool, SmartSchoolAuthenticationError
 
 MEMORY_LOCKOUT_SECONDS = 15 * 60
+
+_logger = logging.getLogger(__name__)
 
 # One credential POST at a time in this process, so two tool calls racing on
 # an expired cookie cannot both send a password that turns out to be wrong.
@@ -97,7 +100,7 @@ class GuardedSession(Smartschool):
             # Staying on /login (including /login?error=1) means the password
             # was rejected; account verification or 2FA come next otherwise.
             if _path_has(str(posted.url), "login"):
-                self._block()
+                self._block("password", str(posted.url))
         return posted
 
     def _do_login_verification(self, response: requests.Response) -> requests.Response:
@@ -108,7 +111,7 @@ class GuardedSession(Smartschool):
                 response
             )
             if _path_has(str(posted.url), "login", "account-verification"):
-                self._block()
+                self._block("account verification", str(posted.url))
         return posted
 
     # -- lockout state: on disk here, in memory for MemoryGuardedSession -----
@@ -137,7 +140,13 @@ class GuardedSession(Smartschool):
         if self._is_blocked():
             raise SmartSchoolAuthenticationError(self._blocked_message())
 
-    def _block(self) -> NoReturn:
+    def _block(self, step: str, landed_on: str) -> NoReturn:
+        # Only the step and the path: no query, username or answer.
+        _logger.warning(
+            "Smartschool rejected the %s: the response stayed on %s",
+            step,
+            urlparse(landed_on).path,
+        )
         self._mark_blocked()
         raise SmartSchoolAuthenticationError(self._blocked_message())
 

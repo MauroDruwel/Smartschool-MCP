@@ -328,3 +328,45 @@ def test_memory_lockout_expires(monkeypatch: pytest.MonkeyPatch) -> None:
     now[0] += guard.MEMORY_LOCKOUT_SECONDS + 1
 
     assert not guard.memory_lockout_active("john", HOST)
+
+
+# ---------------------------------------------------------------------------
+# Logging: say where Smartschool sent us, never who or with what
+# ---------------------------------------------------------------------------
+
+
+def test_rejected_password_logs_the_page_without_secrets(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    fake = FakeSmartschool()
+    session = _session(guard.GuardedSession, fake, password="wrong")
+
+    with (
+        caplog.at_level("WARNING", logger="smartschool_mcp.guard"),
+        pytest.raises(SmartSchoolAuthenticationError),
+    ):
+        session.get("/")
+
+    logged = caplog.text
+    assert "password" in logged
+    assert "/login" in logged
+    assert "error=1" not in logged
+    assert "john" not in logged
+    assert "wrong" not in logged
+
+
+def test_rejected_birthday_logs_the_verification_page(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    fake = FakeSmartschool(birthday="2000-01-01")
+    session = _session(guard.GuardedSession, fake, mfa="1999-12-31")
+
+    with (
+        caplog.at_level("WARNING", logger="smartschool_mcp.guard"),
+        pytest.raises(SmartSchoolAuthenticationError),
+    ):
+        session.get("/")
+
+    assert "verification" in caplog.text
+    assert "/account-verification" in caplog.text
+    assert "1999-12-31" not in caplog.text
