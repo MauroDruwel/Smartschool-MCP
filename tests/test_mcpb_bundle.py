@@ -52,11 +52,13 @@ def test_manifest_runs_the_server_over_stdio_with_the_env_credentials() -> None:
     }
 
 
-def test_secrets_are_marked_sensitive() -> None:
+def test_password_is_masked_and_birth_date_shown() -> None:
     user_config = _manifest()["user_config"]
 
     assert user_config["password"]["sensitive"] is True
-    assert user_config["mfa"]["sensitive"] is True
+    # Shown, not masked: a typo in the birth date costs a login attempt.
+    assert user_config["mfa"].get("sensitive") is not True
+    assert "YYYY-MM-DD" in user_config["mfa"]["title"]
     assert user_config["school"].get("sensitive") is not True
 
 

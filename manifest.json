@@ -4,7 +4,7 @@
   "display_name": "Smartschool",
   "version": "0.3.0",
   "description": "Courses, grades, planner, tasks, messages and documents from Smartschool.",
-  "long_description": "Lets Claude read your Smartschool portal: the timetable and planner (tests, assignments, what to bring), results with the teacher's feedback, messages and their attachments, course documents and leerpaden, notes and absences from the pupil file.\n\nClaude only reads. Nothing is sent, answered or changed in Smartschool.\n\nSet up: fill in your school's Smartschool address, your username and password, and the answer to Smartschool's extra verification (a birth date, or a 2FA secret). Your credentials stay on your computer; what Claude looks up appears in your conversation.",
+  "long_description": "Lets Claude read your Smartschool portal: the timetable and planner (tests, assignments, what to bring), results with the teacher's feedback, messages and their attachments, course documents and leerpaden, notes and absences from the pupil file.\n\nClaude only reads. Nothing is sent, answered or changed in Smartschool.\n\nSet up: fill in your school's Smartschool address, your username and password, and the birth date Smartschool asks for (on a parent account, your child's; or a 2FA secret). Your credentials stay on your computer; what Claude looks up appears in your conversation.",
   "author": {
     "name": "Mauro Druwel",
     "url": "https://github.com/MauroDruwel"
@@ -146,10 +146,9 @@
     },
     "mfa": {
       "type": "string",
-      "title": "Verification",
-      "description": "The answer to Smartschool's extra verification: a birth date (YYYY-MM-DD) or a 2FA (TOTP) secret.",
-      "required": true,
-      "sensitive": true
+      "title": "Birth date (YYYY-MM-DD)",
+      "description": "The birth date Smartschool asks for after the password; on a parent account, your child's birth date. With 2FA, enter the TOTP secret instead.",
+      "required": true
     }
   },
   "keywords": [
