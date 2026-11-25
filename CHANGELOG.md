@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `get_results` no longer fails when a feedback's attachments arrive as objects (`{"id": ..., "wopiUrl": null}`) instead of id strings, as some schools send them: one such feedback failed validation of the whole results page. Each row now has `feedback_attachment_ids`
 - `get_schedule` and `get_future_tasks` read the planner when the legacy agenda is empty, as it is at schools that moved to the planner: the timetable comes from the `planned-lessons`, `planned-placeholders` and `planned-lesson-cluster-moments` elements, the tasks from `planned-assignments` and `planned-to-dos`. Both results carry `source` (`"agenda"` or `"planner"`); when the planner can't be read, the agenda's result comes back with `planner_error`
 
 ### Changed
