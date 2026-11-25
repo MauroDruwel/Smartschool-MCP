@@ -44,6 +44,7 @@ from smartschool import (
 )
 
 from smartschool_mcp import content
+from smartschool_mcp.guard import GuardedSession, MemoryGuardedSession
 
 FastMCP = MCPServer  # Backward compatibility alias
 
@@ -83,7 +84,7 @@ def _env_session() -> Smartschool:
     would otherwise reuse one session object for days.  See
     ``_ensure_live_session`` for why an expired cookie is not self-healing.
     """
-    return Smartschool(EnvCredentials())
+    return GuardedSession(EnvCredentials())
 
 
 # Path segments Smartschool redirects to when a session is not authenticated.
@@ -164,7 +165,7 @@ def _cached_app_session(
     if not validated_host:
         raise ValueError("Untrusted or invalid Smartschool host")
 
-    return Smartschool(
+    return MemoryGuardedSession(
         AppCredentials(
             username=username,
             password=password,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 from builtins import __import__ as builtin_import
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -38,7 +39,9 @@ def test_env_session_is_ttl_cached() -> None:
 
     with (
         patch("smartschool_mcp.server.EnvCredentials", return_value="env-creds"),
-        patch("smartschool_mcp.server.Smartschool", return_value="session") as mock_ss,
+        patch(
+            "smartschool_mcp.server.GuardedSession", return_value="session"
+        ) as mock_ss,
     ):
         first = srv._env_session()
         second = srv._env_session()
@@ -61,7 +64,7 @@ def test_env_session_cache_expires_so_stdio_sessions_are_rebuilt() -> None:
     with (
         patch("smartschool_mcp.server.EnvCredentials", return_value="env-creds"),
         patch(
-            "smartschool_mcp.server.Smartschool", side_effect=["first", "second"]
+            "smartschool_mcp.server.GuardedSession", side_effect=["first", "second"]
         ) as mock_ss,
     ):
         assert srv._env_session() == "first"
@@ -173,7 +176,7 @@ def test_cached_app_session_uses_credentials_cache() -> None:
             side_effect=lambda **kwargs: kwargs,
         ) as mock_creds,
         patch(
-            "smartschool_mcp.server.Smartschool", return_value="app-session"
+            "smartschool_mcp.server.MemoryGuardedSession", return_value="app-session"
         ) as mock_ss,
     ):
         first = srv._cached_app_session("user", "pass", "school.smartschool.be", "")
@@ -284,3 +287,35 @@ def test_session_raises_auth_error_when_credentials_not_found() -> None:
 
     mock_cached.assert_not_called()
     mock_env.assert_not_called()
+
+
+def test_env_session_is_guarded_against_lockout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    srv = _reload_server_module()
+    srv._env_session.cache_clear()
+
+    with patch("smartschool_mcp.server.EnvCredentials", return_value=None):
+        session = srv._env_session()
+
+    from smartschool_mcp.guard import GuardedSession, MemoryGuardedSession
+
+    assert isinstance(session, GuardedSession)
+    assert not isinstance(session, MemoryGuardedSession)
+
+
+def test_app_session_keeps_its_lockout_in_memory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    srv = _reload_server_module()
+    srv._session_cache.clear()
+
+    session = srv._cached_app_session(
+        "user", "pass", "school.smartschool.be", "2000-01-01"
+    )
+
+    from smartschool_mcp.guard import MemoryGuardedSession
+
+    assert isinstance(session, MemoryGuardedSession)
