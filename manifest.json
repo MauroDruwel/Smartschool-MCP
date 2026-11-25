@@ -1,0 +1,205 @@
+{
+  "manifest_version": "0.4",
+  "name": "smartschool-mcp",
+  "display_name": "Smartschool",
+  "icon": "icon.png",
+  "icons": [
+    {
+      "src": "assets/icons/icon-48-light.png",
+      "size": "48x48",
+      "theme": "light"
+    },
+    {
+      "src": "assets/icons/icon-128-light.png",
+      "size": "128x128",
+      "theme": "light"
+    },
+    {
+      "src": "assets/icons/icon-512-light.png",
+      "size": "512x512",
+      "theme": "light"
+    },
+    {
+      "src": "assets/icons/icon-48-dark.png",
+      "size": "48x48",
+      "theme": "dark"
+    },
+    {
+      "src": "assets/icons/icon-128-dark.png",
+      "size": "128x128",
+      "theme": "dark"
+    },
+    {
+      "src": "assets/icons/icon-512-dark.png",
+      "size": "512x512",
+      "theme": "dark"
+    }
+  ],
+  "version": "0.3.0",
+  "description": "Courses, grades, planner, tasks, messages and documents from Smartschool.",
+  "long_description": "Lets Claude read your Smartschool portal: the timetable and planner (tests, assignments, what to bring), results with the teacher's feedback, messages and their attachments, course documents and leerpaden, notes and absences from the pupil file.\n\nClaude only reads. Nothing is sent, answered or changed in Smartschool.\n\nSet up: fill in your school's Smartschool address, your username and password, and the birth date Smartschool asks for (on a parent account, your child's; or a 2FA secret). Your credentials stay on your computer; what Claude looks up appears in your conversation.",
+  "author": {
+    "name": "Mauro Druwel",
+    "url": "https://github.com/MauroDruwel"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MauroDruwel/Smartschool-MCP"
+  },
+  "homepage": "https://github.com/MauroDruwel/Smartschool-MCP",
+  "documentation": "https://github.com/MauroDruwel/Smartschool-MCP/blob/main/README.md",
+  "support": "https://github.com/MauroDruwel/Smartschool-MCP/issues",
+  "server": {
+    "type": "uv",
+    "entry_point": "smartschool_mcp/__main__.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${__dirname}",
+        "python",
+        "-m",
+        "smartschool_mcp"
+      ],
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "SMARTSCHOOL_MAIN_URL": "${user_config.school}",
+        "SMARTSCHOOL_USERNAME": "${user_config.username}",
+        "SMARTSCHOOL_PASSWORD": "${user_config.password}",
+        "SMARTSCHOOL_MFA": "${user_config.mfa}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "get_courses",
+      "description": "Retrieve all available courses with their teachers."
+    },
+    {
+      "name": "get_results",
+      "description": "Retrieve student results/grades with detailed information."
+    },
+    {
+      "name": "get_future_tasks",
+      "description": "Retrieve upcoming assignments and tasks."
+    },
+    {
+      "name": "get_messages",
+      "description": "Retrieve messages from the specified mailbox with filtering options."
+    },
+    {
+      "name": "get_schedule",
+      "description": "Retrieve the lesson schedule for a given day."
+    },
+    {
+      "name": "get_periods",
+      "description": "Retrieve academic periods/terms for the current school year."
+    },
+    {
+      "name": "get_reports",
+      "description": "Retrieve available academic report cards."
+    },
+    {
+      "name": "get_planned_elements",
+      "description": "Retrieve what the Smartschool planner holds for the coming days."
+    },
+    {
+      "name": "get_planned_element_details",
+      "description": "Read one planner element in full: description, attachments and links."
+    },
+    {
+      "name": "download_planned_attachment",
+      "description": "Download an attachment of a planner element."
+    },
+    {
+      "name": "get_course_documents",
+      "description": "List the Documenten of a course, one folder at a time."
+    },
+    {
+      "name": "download_course_document",
+      "description": "Download a file from a course's Documenten."
+    },
+    {
+      "name": "get_learning_paths",
+      "description": "List the leerpaden of a course, with the folders they are kept in."
+    },
+    {
+      "name": "get_learning_path",
+      "description": "Show the content of a leerpad: its sections and steps."
+    },
+    {
+      "name": "get_student_support_links",
+      "description": "Retrieve student support links and resources."
+    },
+    {
+      "name": "get_student_notes",
+      "description": "Retrieve student file notes (\"dossierlijnen\") from the pupil-tracking system (Leerlingvolgsysteem / LVS), newest first."
+    },
+    {
+      "name": "get_student_absences",
+      "description": "Retrieve recorded absences from the pupil-tracking system (Leerlingvolgsysteem / LVS), newest first."
+    },
+    {
+      "name": "get_attachments",
+      "description": "List all attachments for a specific message."
+    },
+    {
+      "name": "download_attachment",
+      "description": "Download a specific attachment from a message."
+    },
+    {
+      "name": "get_homepage_blocks",
+      "description": "Retrieve the \"in de kijker\" blocks pinned to the Smartschool homepage."
+    },
+    {
+      "name": "download_homepage_image",
+      "description": "Download an image embedded in a homepage block."
+    }
+  ],
+  "user_config": {
+    "school": {
+      "type": "string",
+      "title": "School address",
+      "description": "Your school's Smartschool address, e.g. myschool.smartschool.be",
+      "required": true
+    },
+    "username": {
+      "type": "string",
+      "title": "Username",
+      "description": "Your Smartschool username.",
+      "required": true
+    },
+    "password": {
+      "type": "string",
+      "title": "Password",
+      "description": "Your Smartschool password.",
+      "required": true,
+      "sensitive": true
+    },
+    "mfa": {
+      "type": "string",
+      "title": "Birth date (dd-mm-yyyy)",
+      "description": "The birth date Smartschool asks for after the password, e.g. 12-11-2014; on a parent account, your child's birth date. With 2FA, enter the TOTP secret instead.",
+      "required": true
+    }
+  },
+  "keywords": [
+    "smartschool",
+    "school",
+    "grades",
+    "planner",
+    "education"
+  ],
+  "license": "MIT",
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "python": ">=3.10"
+    }
+  }
+}
