@@ -37,7 +37,7 @@ def test_env_session_is_ttl_cached() -> None:
     srv._env_session.cache_clear()
 
     with (
-        patch("smartschool_mcp.server.EnvCredentials", return_value="env-creds"),
+        patch("smartschool_mcp.server.env_credentials", return_value="env-creds"),
         patch("smartschool_mcp.server.Smartschool", return_value="session") as mock_ss,
     ):
         first = srv._env_session()
@@ -59,7 +59,7 @@ def test_env_session_cache_expires_so_stdio_sessions_are_rebuilt() -> None:
     # Expiry must actually rebuild the session, not hand back the stale one.
     srv._env_session_cache.clear()
     with (
-        patch("smartschool_mcp.server.EnvCredentials", return_value="env-creds"),
+        patch("smartschool_mcp.server.env_credentials", return_value="env-creds"),
         patch(
             "smartschool_mcp.server.Smartschool", side_effect=["first", "second"]
         ) as mock_ss,
@@ -284,3 +284,23 @@ def test_session_raises_auth_error_when_credentials_not_found() -> None:
 
     mock_cached.assert_not_called()
     mock_env.assert_not_called()
+
+
+def test_bad_settings_fail_before_any_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A typo in the birth date must not cost a Smartschool login attempt."""
+    srv = _reload_server_module()
+    srv._env_session.cache_clear()
+    monkeypatch.setenv("SMARTSCHOOL_USERNAME", "john.doe")
+    monkeypatch.setenv("SMARTSCHOOL_PASSWORD", "secret")
+    monkeypatch.setenv("SMARTSCHOOL_MAIN_URL", "myschool.smartschool.be")
+    monkeypatch.setenv("SMARTSCHOOL_MFA", "31/02/2012")
+
+    with (
+        patch("smartschool_mcp.server.Smartschool") as mock_ss,
+        pytest.raises(ValueError, match="SMARTSCHOOL_MFA"),
+    ):
+        srv._env_session()
+
+    mock_ss.assert_not_called()

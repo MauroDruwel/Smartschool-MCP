@@ -22,7 +22,6 @@ from smartschool import (
     Attachments,
     BoxType,
     Courses,
-    EnvCredentials,
     FolderItem,
     FutureTasks,
     InternetShortcut,
@@ -44,6 +43,7 @@ from smartschool import (
 )
 
 from smartschool_mcp import content
+from smartschool_mcp.settings import env_credentials
 
 FastMCP = MCPServer  # Backward compatibility alias
 
@@ -83,7 +83,8 @@ def _env_session() -> Smartschool:
     would otherwise reuse one session object for days.  See
     ``_ensure_live_session`` for why an expired cookie is not self-healing.
     """
-    return Smartschool(EnvCredentials())
+    # Checked and tidied first: a typo must not cost a login attempt.
+    return Smartschool(env_credentials())
 
 
 # Path segments Smartschool redirects to when a session is not authenticated.

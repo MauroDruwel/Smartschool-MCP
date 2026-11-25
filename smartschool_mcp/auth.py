@@ -35,6 +35,8 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 from starlette.routing import Route
 
+from smartschool_mcp.settings import SettingsError, verification_answer
+
 _logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -552,9 +554,21 @@ async def _handle_login_post(
             mfa=mfa,
         )
 
+    # A typo in the birth date must not cost a Smartschool login attempt.
+    try:
+        answer = verification_answer(mfa)
+    except SettingsError:
+        return _render_login_form(
+            pending_id,
+            error="Birth date must be dd-mm-yyyy (or enter your 2FA secret).",
+            school=school_raw,
+            username=username,
+            mfa=mfa,
+        )
+
     # Validate credentials by attempting a Smartschool login
     creds = AppCredentials(
-        username=username, password=password, main_url=school, mfa=mfa
+        username=username, password=password, main_url=school, mfa=answer
     )
     try:
         session = Smartschool(creds)
