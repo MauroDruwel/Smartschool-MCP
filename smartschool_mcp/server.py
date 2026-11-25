@@ -43,12 +43,13 @@ from smartschool import (
     TopNavCourses,
 )
 
-from smartschool_mcp import content
+from smartschool_mcp import __version__, content
 
 FastMCP = MCPServer  # Backward compatibility alias
 
 # MCP server - tools are registered via @mcp.tool() decorators below
-mcp = MCPServer("Smartschool MCP")
+# The version shows up in the client's server info, so users can tell builds apart.
+mcp = MCPServer("Smartschool MCP", version=__version__)
 
 
 class AuthenticationError(RuntimeError):
