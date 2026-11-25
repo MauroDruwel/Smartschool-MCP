@@ -640,7 +640,7 @@ class TestLoginHandlers:
                 "school": "school.smartschool.be",
                 "username": "john",
                 "password": "wrong",
-                "mfa": "",
+                "mfa": "2000-01-01",
             }
         )
 
@@ -725,7 +725,7 @@ class TestLoginHandlers:
                 "school": "school.smartschool.be",
                 "username": "john",
                 "password": "wrong",
-                "mfa": "",
+                "mfa": "2000-01-01",
             }
         )
         rejected = MagicMock()
@@ -746,3 +746,27 @@ class TestLoginHandlers:
         provider.complete_authorization.assert_not_called()
         assert response.status_code == 200
         assert "minutes" in response.body.decode()
+
+
+@pytest.mark.asyncio
+async def test_handle_login_post_refuses_an_unusable_birth_date() -> None:
+    """A typo in the birth date must not cost a Smartschool login attempt."""
+    provider = MagicMock()
+    provider.get_pending_auth.return_value = object()
+    request = MagicMock()
+    request.form = AsyncMock(
+        return_value={
+            "pending": "abc",
+            "school": "school.smartschool.be",
+            "username": "john",
+            "password": "secret",
+            "mfa": "31/02/2012",
+        }
+    )
+
+    with patch("smartschool_mcp.auth.MemoryGuardedSession") as mock_session:
+        response = await _handle_login_post(request, provider)
+
+    mock_session.assert_not_called()
+    assert response.status_code == 200
+    assert "dd-mm-yyyy" in response.body.decode()
