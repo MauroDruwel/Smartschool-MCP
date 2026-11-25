@@ -702,4 +702,4 @@ async def test_handle_login_post_refuses_an_unusable_birth_date() -> None:
 
     mock_session.assert_not_called()
     assert response.status_code == 200
-    assert "YYYY-MM-DD" in response.body.decode()
+    assert "dd-mm-yyyy" in response.body.decode()

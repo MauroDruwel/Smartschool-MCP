@@ -560,7 +560,7 @@ async def _handle_login_post(
     except SettingsError:
         return _render_login_form(
             pending_id,
-            error="Birth date must be YYYY-MM-DD (or enter your 2FA secret).",
+            error="Birth date must be dd-mm-yyyy (or enter your 2FA secret).",
             school=school_raw,
             username=username,
             mfa=mfa,

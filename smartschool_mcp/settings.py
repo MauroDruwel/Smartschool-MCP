@@ -79,7 +79,7 @@ def verification_answer(raw: str) -> str:
             return secret
     raise SettingsError(
         "SMARTSCHOOL_MFA must be the birth date Smartschool asks for, as "
-        "YYYY-MM-DD, or a 2FA (TOTP) secret"
+        "dd-mm-yyyy (or YYYY-MM-DD), or a 2FA (TOTP) secret"
     )
 
 

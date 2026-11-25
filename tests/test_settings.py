@@ -52,6 +52,8 @@ def test_unusable_school_address_is_refused(raw: str) -> None:
         ("04/03/2012", "2012-03-04"),
         ("4-3-2012", "2012-03-04"),
         ("04.03.2012", "2012-03-04"),
+        ("12-11-2014", "2014-11-12"),
+        ("12/11/2014", "2014-11-12"),
     ],
 )
 def test_birth_date_becomes_iso(raw: str, expected: str) -> None:
